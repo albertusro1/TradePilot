@@ -78,6 +78,14 @@ async function loadMarketSummary() {
         let diff = close - prev;
         
         let vol = parseIndoNum(s.volume);
+        let v10 = parseFloat(s.vol_10d) || 0;
+        let v20 = parseFloat(s.vol_20d) || 0;
+        let v3m = parseFloat(s.vol_3m) || 0;
+        
+        let vol_10d_pct = v10 > 0 ? ((vol - v10) / v10) * 100 : 0;
+        let vol_20d_pct = v20 > 0 ? ((vol - v20) / v20) * 100 : 0;
+        let vol_3m_pct = v3m > 0 ? ((vol - v3m) / v3m) * 100 : 0;
+
         let val = parseIndoNum(s.nilai);
         let fBuy = parseIndoNum(s.foreign_buy);
         let fSell = parseIndoNum(s.foreign_sell);
@@ -95,6 +103,9 @@ async function loadMarketSummary() {
             pct,
             diff,
             vol,
+            vol_10d_pct,
+            vol_20d_pct,
+            vol_3m_pct,
             val,
             fNet
         };
@@ -195,7 +206,7 @@ async function loadTabContent(targetId) {
 function renderSummaryTable(results) {
     const tbody = document.querySelector('#table-summary tbody');
     if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="11" class="center">No data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" class="center">No data available</td></tr>';
         return;
     }
 
@@ -203,6 +214,10 @@ function renderSummaryTable(results) {
     tbody.innerHTML = results.map(r => {
         let colorClass = r.pct > 0 ? 'txt-green' : (r.pct < 0 ? 'txt-red' : '');
         let fNetColor = r.fNet > 0 ? 'txt-green' : (r.fNet < 0 ? 'txt-red' : '');
+        
+        let c10 = r.vol_10d_pct > 0 ? 'txt-green' : (r.vol_10d_pct < 0 ? 'txt-red' : '');
+        let c20 = r.vol_20d_pct > 0 ? 'txt-green' : (r.vol_20d_pct < 0 ? 'txt-red' : '');
+        let c3m = r.vol_3m_pct > 0 ? 'txt-green' : (r.vol_3m_pct < 0 ? 'txt-red' : '');
         
         return `
         <tr>
@@ -214,6 +229,9 @@ function renderSummaryTable(results) {
             <td class="right" data-value="${r.close}">${formatNum(r.close)}</td>
             <td class="right ${colorClass}" data-value="${r.pct}">${formatPct(r.pct)}</td>
             <td class="right" data-value="${r.vol}">${formatNum(r.vol)}</td>
+            <td class="right ${c10}" data-value="${r.vol_10d_pct}">${formatPct(r.vol_10d_pct)}</td>
+            <td class="right ${c20}" data-value="${r.vol_20d_pct}">${formatPct(r.vol_20d_pct)}</td>
+            <td class="right ${c3m}" data-value="${r.vol_3m_pct}">${formatPct(r.vol_3m_pct)}</td>
             <td class="right" data-value="${r.val}">${formatMoney(r.val)}</td>
             <td class="right" data-value="${r.freq}">${formatNum(r.freq)}</td>
             <td class="right ${fNetColor}" data-value="${r.fNet}">${formatNum(r.fNet)}</td>
