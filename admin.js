@@ -33,7 +33,7 @@ triggerScrapeBtn.addEventListener('click', async () => {
     }
     
     setTimeout(() => { 
-        triggerScrapeBtn.innerHTML = '▶ FORCE SCRAPE NOW'; 
+        triggerScrapeBtn.innerHTML = '▶ EXECUTE PIPELINE'; 
         triggerScrapeBtn.style.opacity = '1'; 
     }, 2000);
 });
