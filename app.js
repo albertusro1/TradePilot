@@ -6,13 +6,24 @@ const API_KEY = 'dev_secret_key';
 const refreshBtn = document.getElementById('refresh-btn');
 const syncText = document.getElementById('sync-text');
 const lastUpdated = document.getElementById('last-updated');
-const searchInput = document.getElementById('search-code');
+const searchSummary = document.getElementById('search-summary');
+const searchScreener = document.getElementById('search-screener');
 const tabs = document.querySelectorAll('.tab-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
+
+// Admin Elements
+const triggerScrapeBtn = document.getElementById('trigger-scrape-btn');
+const adminStatus = document.getElementById('admin-status');
+const adminLastRun = document.getElementById('admin-last-run');
+const adminHealth = document.getElementById('admin-health');
+const terminalLogs = document.getElementById('terminal-logs');
 
 // State tracking
 let globalMarketData = null; // Cache to avoid refetching /market/summary
 let globalScreenerData = null; // Cache to avoid refetching /market/screener
+let scraperPollInterval = null;
+let selectedSectors = [];
+let selectedIndustries = [];
 const loadedTabs = {
     'tab-summary': false,
     'tab-screener': false,
@@ -115,7 +126,12 @@ async function loadMarketSummary() {
 
     renderMovers();
     renderMarketActivity();
-    renderSummaryTable(globalMarketData);
+    const q = searchSummary.value.trim().toUpperCase();
+    if (q) {
+        renderSummaryTable(globalMarketData.filter(s => s.kode_saham.includes(q)));
+    } else {
+        renderSummaryTable(globalMarketData);
+    }
     loadedTabs['tab-summary'] = true;
     return true;
 }
@@ -194,12 +210,13 @@ async function loadTabContent(targetId) {
                 mc: parseIndoNum(r.mkt_cap)
             }));
             
-            const q = searchInput.value.trim().toUpperCase();
-            if (q) {
-                renderScreenerTable(globalScreenerData.filter(s => s.kode_saham.includes(q)));
-            } else {
-                renderScreenerTable(globalScreenerData);
-            }
+            const sectors = [...new Set(globalScreenerData.map(r => r.sektor).filter(s => s !== '-'))].sort();
+            const industries = [...new Set(globalScreenerData.map(r => r.industri).filter(s => s !== '-'))].sort();
+            
+            initMultiSelect('ms-sector', sectors, selectedSectors);
+            initMultiSelect('ms-industry', industries, selectedIndustries);
+            
+            applyScreenerFilters();
         }
     } 
     else if (targetId === 'tab-shareholders') {
@@ -207,7 +224,86 @@ async function loadTabContent(targetId) {
         if (data) renderShareholdersTable(data.results);
     }
 
+    if (targetId === 'tab-admin') {
+        pollScraperStatus();
+        if (!scraperPollInterval) scraperPollInterval = setInterval(pollScraperStatus, 2000);
+    } else if (scraperPollInterval) {
+        clearInterval(scraperPollInterval);
+        scraperPollInterval = null;
+    }
+
     loadedTabs[targetId] = true;
+}
+
+function applyScreenerFilters() {
+    if (!globalScreenerData) return;
+    const query = searchScreener.value.trim().toUpperCase();
+    let filtered = globalScreenerData;
+    
+    if (query) filtered = filtered.filter(s => s.kode_saham.includes(query));
+    if (selectedSectors.length > 0) filtered = filtered.filter(s => selectedSectors.includes(s.sektor));
+    if (selectedIndustries.length > 0) filtered = filtered.filter(s => selectedIndustries.includes(s.industri));
+    
+    renderScreenerTable(filtered);
+}
+
+function initMultiSelect(elementId, items, selectedArray) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const header = el.querySelector('.ms-header');
+    const dropdown = el.querySelector('.ms-dropdown');
+    
+    header.innerHTML = `All ${el.getAttribute('data-name')}s \u25BE`;
+    dropdown.innerHTML = items.map(t => `<label><input type="checkbox" value="${t}"> ${t.length > 30 ? t.substring(0,30)+'...' : t}</label>`).join('');
+    
+    header.onclick = (e) => {
+        const isHidden = dropdown.style.display === 'none';
+        document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none');
+        dropdown.style.display = isHidden ? 'block' : 'none';
+        e.stopPropagation();
+    };
+    
+    dropdown.querySelectorAll('input').forEach(chk => {
+        chk.addEventListener('change', (e) => {
+            if (e.target.checked) selectedArray.push(e.target.value);
+            else selectedArray.splice(selectedArray.indexOf(e.target.value), 1);
+            
+            header.innerHTML = selectedArray.length === 0 ? `All ${el.getAttribute('data-name')}s \u25BE` : `${selectedArray.length} Selected \u25BE`;
+            applyScreenerFilters();
+        });
+    });
+}
+
+document.addEventListener('click', () => document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none'));
+
+triggerScrapeBtn.addEventListener('click', async () => {
+    if (!confirm('This will trigger a full Node.js Puppeteer scrape. Continue?')) return;
+    triggerScrapeBtn.textContent = '▶ TRIGGERING...'; triggerScrapeBtn.style.opacity = '0.5';
+    try { await fetch('http://localhost:8080/api/v1/scraper/trigger', { method: 'POST', headers: { 'X-API-Key': 'dev_secret_key'} }); } catch (e) { alert('Failed: ' + e.message); }
+    setTimeout(() => { triggerScrapeBtn.textContent = '▶ FORCE SCRAPE NOW'; triggerScrapeBtn.style.opacity = '1'; }, 2000);
+});
+
+async function pollScraperStatus() {
+    try {
+        const res = await fetch('http://localhost:8080/api/v1/scraper/status', { headers: { 'X-API-Key': 'dev_secret_key' } });
+        if (!res.ok) throw new Error('API down');
+        const data = await res.json();
+        
+        adminStatus.textContent = data.is_running ? 'RUNNING' : data.status;
+        adminStatus.className = 'value ' + (data.is_running ? 'txt-blue' : (data.status.includes('Fail') ? 'txt-red' : ''));
+        adminLastRun.textContent = data.last_run || '--';
+        adminHealth.textContent = 'Online'; adminHealth.className = 'value txt-green';
+        
+        if (data.logs && data.logs.length > 0) {
+            terminalLogs.innerHTML = data.logs.join('<br>');
+            terminalLogs.parentElement.scrollTop = terminalLogs.parentElement.scrollHeight;
+        } else {
+            terminalLogs.innerHTML = 'System Idle. Awaiting commands...';
+        }
+    } catch (e) {
+        adminHealth.textContent = 'Disconnected'; adminHealth.className = 'value txt-red';
+        terminalLogs.innerHTML = `<span class="txt-red">[ERROR]</span> Backend connection lost.`;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -433,25 +529,20 @@ function init() {
     initTabs();
     setupTableSorting();
     
-    // Setup Search Logic
-    searchInput.addEventListener('input', (e) => {
+    // Setup Isolated Search Logic
+    searchSummary.addEventListener('input', (e) => {
         const query = e.target.value.trim().toUpperCase();
-        const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-target');
-        
-        if (activeTab === 'tab-summary' && globalMarketData) {
+        if (globalMarketData) {
             if (query === '') {
                 renderSummaryTable(globalMarketData);
             } else {
                 renderSummaryTable(globalMarketData.filter(s => s.kode_saham.includes(query)));
             }
-        } else if (activeTab === 'tab-screener' && globalScreenerData) {
-            if (query === '') {
-                renderScreenerTable(globalScreenerData);
-            } else {
-                renderScreenerTable(globalScreenerData.filter(s => s.kode_saham.includes(query)));
-            }
         }
-        // Exclude shareholders filter purposely
+    });
+
+    searchScreener.addEventListener('input', () => {
+        applyScreenerFilters();
     });
     
     // Initial Load
