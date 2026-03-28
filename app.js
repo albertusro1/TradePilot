@@ -283,7 +283,7 @@ function renderSummaryTable(results) {
         return `
         <tr>
             <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
-            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
+            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 18 ? r.nama_perusahaan.substring(0,18)+'...' : r.nama_perusahaan}</td>
             <td class="right" data-value="${r.open}">${formatNum(r.open)}</td>
             <td class="right" data-value="${r.high}">${formatNum(r.high)}</td>
             <td class="right" data-value="${r.low}">${formatNum(r.low)}</td>
@@ -318,9 +318,9 @@ function renderScreenerTable(results) {
         return `
         <tr>
             <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
-            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
+            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 18 ? r.nama_perusahaan.substring(0,18)+'...' : r.nama_perusahaan}</td>
             <td data-value="${r.sektor}">${r.sektor}</td>
-            <td data-value="${r.industri}">${r.industri.length > 20 ? r.industri.substring(0,20)+'...' : r.industri}</td>
+            <td data-value="${r.industri}">${r.industri.length > 18 ? r.industri.substring(0,18)+'...' : r.industri}</td>
             <td class="right ${peColor}" data-value="${r.pe}">${r.pe.toFixed(2)}</td>
             <td class="right" data-value="${r.pbv}">${r.pbv.toFixed(2)}</td>
             <td class="right ${roeColor}" data-value="${r.roe}">${r.roe.toFixed(2)}</td>
@@ -372,7 +372,7 @@ function renderShareholdersTable(results) {
         <tr>
             <td data-value="${rDate}">${rDate}</td>
             <td class="t-code" data-value="${r.kode_emiten}">${r.kode_emiten}</td>
-            <td data-value="${r.nama_pemegang_saham}" title="${r.nama_pemegang_saham}">${r.nama_pemegang_saham.length > 25 ? r.nama_pemegang_saham.substring(0,25)+'...' : r.nama_pemegang_saham}</td>
+            <td data-value="${r.nama_pemegang_saham}" title="${r.nama_pemegang_saham}">${r.nama_pemegang_saham.length > 20 ? r.nama_pemegang_saham.substring(0,20)+'...' : r.nama_pemegang_saham}</td>
             <td data-value="${r.jenis}">${r.jenis || '-'} ${r.status || ''}</td>
             <td class="right" data-value="${shares}">${formatNum(shares)}</td>
             <td class="right" data-value="${pct}">${pct.toFixed(2)}</td>

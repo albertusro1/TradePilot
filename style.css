@@ -404,10 +404,11 @@ table {
     border-collapse: collapse;
     text-align: left;
     white-space: nowrap;
+    font-size: 0.85rem; /* reduced to fit more columns */
 }
 
 th, td {
-    padding: 1rem;
+    padding: 0.6rem 0.75rem; /* tightened from 1rem */
     border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
@@ -415,7 +416,7 @@ th {
     background: rgba(0,0,0,0.2);
     font-weight: 500;
     color: var(--text-muted);
-    font-size: 0.85rem;
+    font-size: 0.75rem; /* reduced from 0.85rem */
     text-transform: uppercase;
     letter-spacing: 0.05em;
     position: sticky;
