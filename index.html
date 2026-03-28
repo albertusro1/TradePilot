@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradePilot • Market Overview</title>
+    <!-- Modern premium font -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <header class="glass-header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="glow-icon">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <h1>TradePilot <span class="badge">PRO</span></h1>
+            </div>
+            <div class="controls">
+                <span id="last-updated">Updating data...</span>
+                <button id="refresh-btn" class="glow-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    Sync
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Top Movers Row -->
+            <section class="movers-section fade-in">
+                <div class="card glass-card top-gainers">
+                    <div class="card-header">
+                        <h2>Top Gainers</h2>
+                        <span class="icon green-icon">↗</span>
+                    </div>
+                    <div class="movers-list" id="gainers-list">
+                        <div class="loader"></div>
+                    </div>
+                </div>
+                
+                <div class="card glass-card top-losers">
+                    <div class="card-header">
+                        <h2>Top Losers</h2>
+                        <span class="icon red-icon">↘</span>
+                    </div>
+                    <div class="movers-list" id="losers-list">
+                        <div class="loader"></div>
+                    </div>
+                </div>
+                
+                <div class="card glass-card quick-stats">
+                    <div class="card-header">
+                        <h2>Market Breadth</h2>
+                        <span class="icon blue-icon">⚖</span>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat"><span class="label">Advancing</span><span class="value txt-green" id="stat-up">--</span></div>
+                        <div class="stat"><span class="label">Declining</span><span class="value txt-red" id="stat-down">--</span></div>
+                        <div class="stat"><span class="label">Unchanged</span><span class="value txt-gray" id="stat-flat">--</span></div>
+                        <div class="stat full-width"><span class="label">Total Listed</span><span class="value txt-blue" id="stat-total">--</span></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Main Tabular Data -->
+            <section class="data-section glass-card slide-up">
+                <div class="tabs">
+                    <button class="tab-btn active" data-target="tab-summary">Market Summary</button>
+                    <button class="tab-btn" data-target="tab-screener">Stock Screener</button>
+                    <button class="tab-btn" data-target="tab-brokers">Top Brokers</button>
+                    <button class="tab-btn" data-target="tab-shareholders">5% Shareholders</button>
+                </div>
+
+                <div class="tab-content">
+                    <!-- Market Summary -->
+                    <div id="tab-summary" class="tab-pane active">
+                        <div class="table-container">
+                            <table id="table-summary">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th class="right">Close</th>
+                                        <th class="right">Change</th>
+                                        <th class="right">Volume</th>
+                                        <th class="right">Value (IDR)</th>
+                                        <th class="right">Foreign Buy</th>
+                                        <th class="right">Foreign Sell</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="8" class="center"><div class="loader inline"></div></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Screener -->
+                    <div id="tab-screener" class="tab-pane">
+                         <div class="table-container">
+                            <table id="table-screener">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th class="right">P/E</th>
+                                        <th class="right">PBV</th>
+                                        <th class="right">ROE (%)</th>
+                                        <th class="right">ROA (%)</th>
+                                        <th class="right">DER</th>
+                                        <th class="right">Mkt Cap</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Brokers -->
+                    <div id="tab-brokers" class="tab-pane">
+                         <div class="table-container">
+                            <table id="table-brokers">
+                                <thead>
+                                    <tr>
+                                        <th>Broker Code</th>
+                                        <th class="right">Net Buy (Vol)</th>
+                                        <th class="right">Net Sell (Vol)</th>
+                                        <th class="right">Net Lots</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Shareholders -->
+                    <div id="tab-shareholders" class="tab-pane">
+                        <div class="pagination-controls">
+                            <span>Showing Top 50 recent changes</span>
+                        </div>
+                         <div class="table-container">
+                            <table id="table-shareholders">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Code</th>
+                                        <th>Shareholder Name</th>
+                                        <th>Type</th>
+                                        <th class="right">Shares</th>
+                                        <th class="right">Pct (%)</th>
+                                        <th class="right">Change</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
