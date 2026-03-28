@@ -60,7 +60,11 @@ async function fetchAPI(endpoint) {
 
 async function loadMarketSummary() {
     const data = await fetchAPI('/market/summary');
-    if (!data || !data.results) return false;
+    if (!data || !data.results || data.results.length === 0) return false;
+    
+    // Set Trading Date Badge
+    const tDate = data.results[0].tanggal_perdagangan_terakhir || '--';
+    document.getElementById('trading-date').textContent = `Date: ${tDate}`;
     
     // Process raw strings into clean numbers for sorting and math
     globalMarketData = data.results.map(s => {
