@@ -275,16 +275,32 @@ function renderShareholdersTable(results) {
     }
 
     tbody.innerHTML = results.map(r => {
-        // Parse numbers for sorting, but keep the raw string for display since it can be % or shares
         let rawChg = r.perubahan || '0';
         let chgNum = parseFloat(rawChg.replace(/,/g, '')) || 0;
-        let isNegative = rawChg.includes('-') || chgNum < 0;
-        let isPositive = rawChg.includes('+') || (!isNegative && chgNum > 0);
         
         let shares = parseFloat(r.jumlah_saham_current?.replace(/,/g, '')) || 0;
         let pct = parseFloat(r.pct_current?.replace(/,/g, '')) || 0;
         
-        let colorClass = isPositive ? 'txt-green' : (isNegative ? 'txt-red' : '');
+        // Detect if raw changes from IDX PDF are percentages or absolute shares
+        let isPercentageOrig = rawChg.includes('%') || rawChg.includes('.') || Math.abs(chgNum) === pct;
+        
+        let changeShares = 0;
+        let changePct = 0;
+        
+        if (pct > 0 && shares > 0) {
+            let totalCompanyShares = shares / (pct / 100);
+            
+            if (isPercentageOrig) {
+                changePct = chgNum;
+                changeShares = Math.round((changePct / 100) * totalCompanyShares);
+            } else {
+                changeShares = chgNum;
+                changePct = (changeShares / totalCompanyShares) * 100;
+            }
+        }
+        
+        let sign = changeShares > 0 ? '+' : '';
+        let colorClass = changeShares > 0 ? 'txt-green' : (changeShares < 0 ? 'txt-red' : '');
         let rDate = r.report_date.split('T')[0];
 
         return `
@@ -295,7 +311,10 @@ function renderShareholdersTable(results) {
             <td data-value="${r.jenis}">${r.jenis || '-'} ${r.status || ''}</td>
             <td class="right" data-value="${shares}">${formatNum(shares)}</td>
             <td class="right" data-value="${pct}">${pct.toFixed(2)}</td>
-            <td class="right ${colorClass}" data-value="${chgNum}">${rawChg}</td>
+            <td class="right ${colorClass}" data-value="${changeShares}" title="Idx Raw Data: ${rawChg}">
+                ${sign}${formatNum(changeShares)} <br>
+                <small>(${sign}${changePct.toFixed(2)}%)</small>
+            </td>
         </tr>
     `}).join('');
 }
