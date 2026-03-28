@@ -158,12 +158,12 @@ async function loadTabContent(targetId) {
             const mapped = data.results.map(r => ({
                 kode_saham: r.kode_saham,
                 nama_perusahaan: r.nama_perusahaan,
-                pe: parseIndoNum(r.per_x),
-                pbv: parseIndoNum(r.pbvr_x),
+                pe: parseIndoNum(r.per),
+                pbv: parseIndoNum(r.pbv),
                 roe: parseIndoNum(r.roe_pct),
                 roa: parseIndoNum(r.roa_pct),
-                der: parseIndoNum(r.der_x),
-                mc: parseIndoNum(r.market_cap)
+                der: parseIndoNum(r.der),
+                mc: parseIndoNum(r.mkt_cap)
             }));
             renderScreenerTable(mapped);
         }
@@ -213,18 +213,24 @@ function renderScreenerTable(results) {
         return;
     }
 
-    tbody.innerHTML = results.map(r => `
+    tbody.innerHTML = results.map(r => {
+        let roeColor = r.roe > 0 ? 'txt-green' : (r.roe < 0 ? 'txt-red' : '');
+        let roaColor = r.roa > 0 ? 'txt-green' : (r.roa < 0 ? 'txt-red' : '');
+        let derColor = r.der > 2 ? 'txt-red' : (r.der > 0 && r.der <= 1 ? 'txt-green' : '');
+        let peColor = r.pe > 0 && r.pe < 15 ? 'txt-green' : (r.pe > 25 || r.pe < 0 ? 'txt-red' : '');
+        
+        return `
         <tr>
             <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
             <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
-            <td class="right" data-value="${r.pe}">${r.pe.toFixed(2)}</td>
+            <td class="right ${peColor}" data-value="${r.pe}">${r.pe.toFixed(2)}</td>
             <td class="right" data-value="${r.pbv}">${r.pbv.toFixed(2)}</td>
-            <td class="right" data-value="${r.roe}">${r.roe.toFixed(2)}</td>
-            <td class="right" data-value="${r.roa}">${r.roa.toFixed(2)}</td>
-            <td class="right" data-value="${r.der}">${r.der.toFixed(2)}</td>
+            <td class="right ${roeColor}" data-value="${r.roe}">${r.roe.toFixed(2)}</td>
+            <td class="right ${roaColor}" data-value="${r.roa}">${r.roa.toFixed(2)}</td>
+            <td class="right ${derColor}" data-value="${r.der}">${r.der.toFixed(2)}</td>
             <td class="right" data-value="${r.mc}">${formatMoney(r.mc)}</td>
         </tr>
-    `).join('');
+    `}).join('');
 }
 
 function renderShareholdersTable(results) {
@@ -235,13 +241,16 @@ function renderShareholdersTable(results) {
     }
 
     tbody.innerHTML = results.map(r => {
-        // change logic
-        let chgNum = parseFloat(r.perubahan?.replace(/,/g, '')) || 0;
+        // Parse numbers for sorting, but keep the raw string for display since it can be % or shares
+        let rawChg = r.perubahan || '0';
+        let chgNum = parseFloat(rawChg.replace(/,/g, '')) || 0;
+        let isNegative = rawChg.includes('-') || chgNum < 0;
+        let isPositive = rawChg.includes('+') || (!isNegative && chgNum > 0);
+        
         let shares = parseFloat(r.jumlah_saham_current?.replace(/,/g, '')) || 0;
         let pct = parseFloat(r.pct_current?.replace(/,/g, '')) || 0;
         
-        let colorClass = chgNum > 0 ? 'txt-green' : (chgNum < 0 ? 'txt-red' : '');
-        let sign = chgNum > 0 ? '+' : '';
+        let colorClass = isPositive ? 'txt-green' : (isNegative ? 'txt-red' : '');
         let rDate = r.report_date.split('T')[0];
 
         return `
@@ -252,7 +261,7 @@ function renderShareholdersTable(results) {
             <td data-value="${r.jenis}">${r.jenis || '-'} ${r.status || ''}</td>
             <td class="right" data-value="${shares}">${formatNum(shares)}</td>
             <td class="right" data-value="${pct}">${pct.toFixed(2)}</td>
-            <td class="right ${colorClass}" data-value="${chgNum}">${sign}${formatNum(chgNum)}</td>
+            <td class="right ${colorClass}" data-value="${chgNum}">${rawChg}</td>
         </tr>
     `}).join('');
 }
