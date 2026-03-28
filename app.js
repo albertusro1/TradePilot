@@ -68,6 +68,10 @@ async function loadMarketSummary() {
     
     // Process raw strings into clean numbers for sorting and math
     globalMarketData = data.results.map(s => {
+        let open = parseIndoNum(s.open_price);
+        let high = parseIndoNum(s.tertinggi);
+        let low = parseIndoNum(s.terendah);
+        let freq = parseIndoNum(s.frekuensi);
         let close = parseIndoNum(s.penutupan);
         let prev = parseIndoNum(s.sebelumnya);
         let pct = prev > 0 ? ((close - prev) / prev) * 100 : 0;
@@ -82,6 +86,10 @@ async function loadMarketSummary() {
         return {
             kode_saham: s.kode_saham,
             nama_perusahaan: s.nama_perusahaan,
+            open,
+            high,
+            low,
+            freq,
             close,
             prev,
             pct,
@@ -187,7 +195,7 @@ async function loadTabContent(targetId) {
 function renderSummaryTable(results) {
     const tbody = document.querySelector('#table-summary tbody');
     if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="center">No data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="center">No data available</td></tr>';
         return;
     }
 
@@ -200,10 +208,14 @@ function renderSummaryTable(results) {
         <tr>
             <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
             <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
+            <td class="right" data-value="${r.open}">${formatNum(r.open)}</td>
+            <td class="right" data-value="${r.high}">${formatNum(r.high)}</td>
+            <td class="right" data-value="${r.low}">${formatNum(r.low)}</td>
             <td class="right" data-value="${r.close}">${formatNum(r.close)}</td>
             <td class="right ${colorClass}" data-value="${r.pct}">${formatPct(r.pct)}</td>
             <td class="right" data-value="${r.vol}">${formatNum(r.vol)}</td>
             <td class="right" data-value="${r.val}">${formatMoney(r.val)}</td>
+            <td class="right" data-value="${r.freq}">${formatNum(r.freq)}</td>
             <td class="right ${fNetColor}" data-value="${r.fNet}">${formatNum(r.fNet)}</td>
         </tr>
         `;
