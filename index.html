@@ -25,7 +25,7 @@
                         <polyline points="1 20 1 14 7 14"></polyline>
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                     </svg>
-                    Sync
+                    <span id="sync-text">Sync</span>
                 </button>
             </div>
         </header>
@@ -55,14 +55,13 @@
                 
                 <div class="card glass-card quick-stats">
                     <div class="card-header">
-                        <h2>Market Breadth</h2>
-                        <span class="icon blue-icon">⚖</span>
+                        <h2>Market Activity</h2>
+                        <span class="icon blue-icon">📊</span>
                     </div>
                     <div class="stats-grid">
-                        <div class="stat"><span class="label">Advancing</span><span class="value txt-green" id="stat-up">--</span></div>
-                        <div class="stat"><span class="label">Declining</span><span class="value txt-red" id="stat-down">--</span></div>
-                        <div class="stat"><span class="label">Unchanged</span><span class="value txt-gray" id="stat-flat">--</span></div>
-                        <div class="stat full-width"><span class="label">Total Listed</span><span class="value txt-blue" id="stat-total">--</span></div>
+                        <div class="stat"><span class="label">Total Val (IDR)</span><span class="value txt-blue" id="stat-value">--</span></div>
+                        <div class="stat"><span class="label">Total Vol</span><span class="value txt-gray" id="stat-volume">--</span></div>
+                        <div class="stat full-width" style="margin-top: 5px;"><span class="label">Foreign Net</span><span class="value" id="stat-foreign">--</span></div>
                     </div>
                 </div>
             </section>
@@ -72,7 +71,6 @@
                 <div class="tabs">
                     <button class="tab-btn active" data-target="tab-summary">Market Summary</button>
                     <button class="tab-btn" data-target="tab-screener">Stock Screener</button>
-                    <button class="tab-btn" data-target="tab-brokers">Top Brokers</button>
                     <button class="tab-btn" data-target="tab-shareholders">5% Shareholders</button>
                 </div>
 
@@ -80,21 +78,20 @@
                     <!-- Market Summary -->
                     <div id="tab-summary" class="tab-pane active">
                         <div class="table-container">
-                            <table id="table-summary">
+                            <table class="sortable" id="table-summary">
                                 <thead>
                                     <tr>
-                                        <th>Code</th>
-                                        <th>Name</th>
-                                        <th class="right">Close</th>
-                                        <th class="right">Change</th>
-                                        <th class="right">Volume</th>
-                                        <th class="right">Value (IDR)</th>
-                                        <th class="right">Foreign Buy</th>
-                                        <th class="right">Foreign Sell</th>
+                                        <th data-type="string">Code ↕</th>
+                                        <th data-type="string">Name ↕</th>
+                                        <th class="right" data-type="number">Close ↕</th>
+                                        <th class="right" data-type="number">Change ↕</th>
+                                        <th class="right" data-type="number">Volume ↕</th>
+                                        <th class="right" data-type="number">Value (IDR) ↕</th>
+                                        <th class="right" data-type="number">Foreign Net ↕</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="8" class="center"><div class="loader inline"></div></td></tr>
+                                    <tr><td colspan="7" class="center"><div class="loader inline"></div></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -103,34 +100,17 @@
                     <!-- Screener -->
                     <div id="tab-screener" class="tab-pane">
                          <div class="table-container">
-                            <table id="table-screener">
+                            <table class="sortable" id="table-screener">
                                 <thead>
                                     <tr>
-                                        <th>Code</th>
-                                        <th>Name</th>
-                                        <th class="right">P/E</th>
-                                        <th class="right">PBV</th>
-                                        <th class="right">ROE (%)</th>
-                                        <th class="right">ROA (%)</th>
-                                        <th class="right">DER</th>
-                                        <th class="right">Mkt Cap</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    
-                    <!-- Brokers -->
-                    <div id="tab-brokers" class="tab-pane">
-                         <div class="table-container">
-                            <table id="table-brokers">
-                                <thead>
-                                    <tr>
-                                        <th>Broker Code</th>
-                                        <th class="right">Net Buy (Vol)</th>
-                                        <th class="right">Net Sell (Vol)</th>
-                                        <th class="right">Net Lots</th>
+                                        <th data-type="string">Code ↕</th>
+                                        <th data-type="string">Name ↕</th>
+                                        <th class="right" data-type="number">P/E ↕</th>
+                                        <th class="right" data-type="number">PBV ↕</th>
+                                        <th class="right" data-type="number">ROE (%) ↕</th>
+                                        <th class="right" data-type="number">ROA (%) ↕</th>
+                                        <th class="right" data-type="number">DER ↕</th>
+                                        <th class="right" data-type="number">Mkt Cap ↕</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -140,20 +120,17 @@
                     
                     <!-- Shareholders -->
                     <div id="tab-shareholders" class="tab-pane">
-                        <div class="pagination-controls">
-                            <span>Showing Top 50 recent changes</span>
-                        </div>
                          <div class="table-container">
-                            <table id="table-shareholders">
+                            <table class="sortable" id="table-shareholders">
                                 <thead>
                                     <tr>
-                                        <th>Date</th>
-                                        <th>Code</th>
-                                        <th>Shareholder Name</th>
-                                        <th>Type</th>
-                                        <th class="right">Shares</th>
-                                        <th class="right">Pct (%)</th>
-                                        <th class="right">Change</th>
+                                        <th data-type="string">Date ↕</th>
+                                        <th data-type="string">Code ↕</th>
+                                        <th data-type="string">Shareholder ↕</th>
+                                        <th data-type="string">Type ↕</th>
+                                        <th class="right" data-type="number">Shares ↕</th>
+                                        <th class="right" data-type="number">Pct (%) ↕</th>
+                                        <th class="right" data-type="number">Change ↕</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>

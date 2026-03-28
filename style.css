@@ -122,10 +122,23 @@ body {
     gap: 0.5rem;
 }
 
-.glow-btn:hover {
+.glow-btn:hover:not(:disabled) {
     background: var(--neon-blue);
     color: var(--bg-dark);
     box-shadow: 0 0 15px var(--border-glow);
+}
+
+.glow-btn.syncing {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+.glow-btn.syncing svg {
+    animation: spin-slow 1.5s linear infinite;
+}
+
+@keyframes spin-slow {
+    100% { transform: rotate(360deg); }
 }
 
 /* Sections Layout */
@@ -346,6 +359,21 @@ th {
     top: 0;
     z-index: 10;
     backdrop-filter: blur(8px);
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition);
+}
+
+th:hover {
+    color: var(--text-main);
+    background: rgba(255,255,255,0.05);
+}
+
+th.asc {
+    color: var(--neon-green);
+}
+th.desc {
+    color: var(--neon-red);
 }
 
 tr:hover td {

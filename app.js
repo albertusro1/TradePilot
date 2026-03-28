@@ -4,26 +4,40 @@ const API_KEY = 'dev_secret_key';
 
 // DOM Elements
 const refreshBtn = document.getElementById('refresh-btn');
+const syncText = document.getElementById('sync-text');
 const lastUpdated = document.getElementById('last-updated');
 const tabs = document.querySelectorAll('.tab-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
 
-// State maps to track if a tab has been loaded already
+// State tracking
+let globalMarketData = null; // Cache to avoid refetching /market/summary
 const loadedTabs = {
     'tab-summary': false,
     'tab-screener': false,
-    'tab-brokers': false,
     'tab-shareholders': false
 };
 
-// Utilities
+// Utilities for Indonesian number format ("1.500" -> 1500)
+const parseIndoNum = (str) => {
+    if (!str) return 0;
+    // Remove all dots, convert commas to dots
+    let val = str.replace(/\./g, '').replace(/,/g, '.');
+    // Remove newlines and tabs from IDX bad data (e.g. "=\n\t\t\t\t0")
+    val = val.replace(/[\n\t= ]/g, '');
+    let num = parseFloat(val);
+    return isNaN(num) ? 0 : num;
+};
+
 const formatNum = (num) => new Intl.NumberFormat('en-US').format(num);
-const formatMoney = (num) => new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(num);
+const formatMoney = (num) => {
+    if (num >= 1e12) return (num / 1e12).toFixed(2) + ' T';
+    if (num >= 1e9) return (num / 1e9).toFixed(2) + ' B';
+    if (num >= 1e6) return (num / 1e6).toFixed(2) + ' M';
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
+};
 const formatPct = (num) => {
-    let val = parseFloat(num);
-    if (isNaN(val)) return '-';
-    let sign = val > 0 ? '+' : '';
-    return `${sign}${val.toFixed(2)}%`;
+    let sign = num > 0 ? '+' : '';
+    return `${sign}${num.toFixed(2)}%`;
 };
 
 // Main fetch wrapper
@@ -41,63 +55,94 @@ async function fetchAPI(endpoint) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// OVERVIEW & MOVERS
+// DATA FETCHING & MOVERS
 // ─────────────────────────────────────────────────────────────
 
-async function loadMovers() {
-    const data = await fetchAPI('/market/movers');
-    if (!data || !data.top_gainers || !data.top_losers) return;
-
-    // Render Gainers
-    const gainersHTML = data.top_gainers.slice(0, 4).map(s => {
-        return `
-        <div class="mover-item">
-            <div>
-                <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price">${formatNum(s.close)}</div>
-            </div>
-            <div class="m-change positive">+${s.perubahan} (+${s.persentase}%)</div>
-        </div>`;
-    }).join('');
-    document.getElementById('gainers-list').innerHTML = gainersHTML;
-
-    // Render Losers
-    const losersHTML = data.top_losers.slice(0, 4).map(s => {
-         return `
-        <div class="mover-item">
-            <div>
-                <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price">${formatNum(s.close)}</div>
-            </div>
-            <div class="m-change negative">${s.perubahan} (${s.persentase}%)</div>
-        </div>`;
-    }).join('');
-    document.getElementById('losers-list').innerHTML = losersHTML;
-
-    updateTimestamp();
-}
-
-async function loadBreadth() {
-    // We can infer breadth from the summary API
+async function loadMarketSummary() {
     const data = await fetchAPI('/market/summary');
-    if (!data || !data.results) return;
+    if (!data || !data.results) return false;
     
-    let up = 0, down = 0, flat = 0;
-    data.results.forEach(s => {
-        let chg = parseFloat(s.perubahan) || 0;
-        if (chg > 0) up++;
-        else if (chg < 0) down++;
-        else flat++;
+    // Process raw strings into clean numbers for sorting and math
+    globalMarketData = data.results.map(s => {
+        let close = parseIndoNum(s.penutupan);
+        let prev = parseIndoNum(s.sebelumnya);
+        let pct = prev > 0 ? ((close - prev) / prev) * 100 : 0;
+        let diff = close - prev;
+        
+        let vol = parseIndoNum(s.volume);
+        let val = parseIndoNum(s.nilai);
+        let fBuy = parseIndoNum(s.foreign_buy);
+        let fSell = parseIndoNum(s.foreign_sell);
+        let fNet = fBuy - fSell;
+
+        return {
+            kode_saham: s.kode_saham,
+            nama_perusahaan: s.nama_perusahaan,
+            close,
+            prev,
+            pct,
+            diff,
+            vol,
+            val,
+            fNet
+        };
     });
 
-    document.getElementById('stat-up').textContent = up;
-    document.getElementById('stat-down').textContent = down;
-    document.getElementById('stat-flat').textContent = flat;
-    document.getElementById('stat-total').textContent = data.results.length;
-
-    // Also populate tab-summary since we have the data
-    renderSummaryTable(data.results);
+    renderMovers();
+    renderMarketActivity();
+    renderSummaryTable(globalMarketData);
     loadedTabs['tab-summary'] = true;
+    return true;
+}
+
+function renderMovers() {
+    if (!globalMarketData) return;
+
+    // Filter valid traded stocks
+    const traded = globalMarketData.filter(s => s.vol > 0 && s.prev > 0);
+    
+    // Sort
+    const gainers = [...traded].sort((a, b) => b.pct - a.pct).slice(0, 5);
+    const losers = [...traded].sort((a, b) => a.pct - b.pct).slice(0, 5);
+
+    // Render Gainers
+    document.getElementById('gainers-list').innerHTML = gainers.map(s => `
+        <div class="mover-item">
+            <div>
+                <div class="m-code">${s.kode_saham}</div>
+                <div class="m-price">${formatNum(s.close)}</div>
+            </div>
+            <div class="m-change positive">+${s.diff} (+${s.pct.toFixed(2)}%)</div>
+        </div>`).join('');
+
+    // Render Losers
+    document.getElementById('losers-list').innerHTML = losers.map(s => `
+        <div class="mover-item">
+            <div>
+                <div class="m-code">${s.kode_saham}</div>
+                <div class="m-price">${formatNum(s.close)}</div>
+            </div>
+            <div class="m-change negative">${s.diff} (${s.pct.toFixed(2)}%)</div>
+        </div>`).join('');
+}
+
+function renderMarketActivity() {
+    if (!globalMarketData) return;
+    
+    let totalVal = 0, totalVol = 0, totalFNet = 0;
+    globalMarketData.forEach(s => {
+        totalVal += s.val;
+        totalVol += s.vol;
+        totalFNet += s.fNet;
+    });
+
+    document.getElementById('stat-value').textContent = formatMoney(totalVal);
+    document.getElementById('stat-volume').textContent = formatMoney(totalVol);
+    
+    const fNetEl = document.getElementById('stat-foreign');
+    fNetEl.textContent = formatMoney(Math.abs(totalFNet));
+    fNetEl.className = 'value ' + (totalFNet > 0 ? 'txt-green' : 'txt-red');
+    if (totalFNet < 0) fNetEl.textContent = '-' + fNetEl.textContent;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -107,21 +152,24 @@ async function loadBreadth() {
 async function loadTabContent(targetId) {
     if (loadedTabs[targetId]) return;
 
-    if (targetId === 'tab-summary') {
-        const data = await fetchAPI('/market/summary');
-        if (data) renderSummaryTable(data.results);
-    } 
-    else if (targetId === 'tab-screener') {
+    if (targetId === 'tab-screener') {
         const data = await fetchAPI('/market/screener');
-        if (data) renderScreenerTable(data.results);
+        if (data) {
+            const mapped = data.results.map(r => ({
+                kode_saham: r.kode_saham,
+                nama_perusahaan: r.nama_perusahaan,
+                pe: parseIndoNum(r.per_x),
+                pbv: parseIndoNum(r.pbvr_x),
+                roe: parseIndoNum(r.roe_pct),
+                roa: parseIndoNum(r.roa_pct),
+                der: parseIndoNum(r.der_x),
+                mc: parseIndoNum(r.market_cap)
+            }));
+            renderScreenerTable(mapped);
+        }
     } 
-    else if (targetId === 'tab-brokers') {
-        const data = await fetchAPI('/brokers/summary');
-        if (data) renderBrokersTable(data.results);
-    }
     else if (targetId === 'tab-shareholders') {
-        // Just page 1, per_page 50
-        const data = await fetchAPI('/market/shareholders?page=1&per_page=50');
+        const data = await fetchAPI('/market/shareholders?page=1&per_page=150');
         if (data) renderShareholdersTable(data.results);
     }
 
@@ -135,25 +183,24 @@ async function loadTabContent(targetId) {
 function renderSummaryTable(results) {
     const tbody = document.querySelector('#table-summary tbody');
     if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="center">No data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="center">No data available</td></tr>';
         return;
     }
 
-    tbody.innerHTML = results.slice(0, 100).map(r => {
-        let pct = parseFloat(r.persentase) || 0;
-        let colorClass = pct > 0 ? 'txt-green' : (pct < 0 ? 'txt-red' : '');
-        let sign = pct > 0 ? '+' : '';
+    // Assign data attributes for sorting logic
+    tbody.innerHTML = results.map(r => {
+        let colorClass = r.pct > 0 ? 'txt-green' : (r.pct < 0 ? 'txt-red' : '');
+        let fNetColor = r.fNet > 0 ? 'txt-green' : (r.fNet < 0 ? 'txt-red' : '');
         
         return `
         <tr>
-            <td class="t-code">${r.kode_saham}</td>
-            <td title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
-            <td class="right">${formatNum(r.close)}</td>
-            <td class="right ${colorClass}">${sign}${r.perubahan} (${sign}${r.persentase}%)</td>
-            <td class="right">${formatNum(r.volume)}</td>
-            <td class="right">${formatMoney(r.value)}</td>
-            <td class="right txt-green">${formatNum(r.foreign_buy)}</td>
-            <td class="right txt-red">${formatNum(r.foreign_sell)}</td>
+            <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
+            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
+            <td class="right" data-value="${r.close}">${formatNum(r.close)}</td>
+            <td class="right ${colorClass}" data-value="${r.pct}">${formatPct(r.pct)}</td>
+            <td class="right" data-value="${r.vol}">${formatNum(r.vol)}</td>
+            <td class="right" data-value="${r.val}">${formatMoney(r.val)}</td>
+            <td class="right ${fNetColor}" data-value="${r.fNet}">${formatNum(r.fNet)}</td>
         </tr>
         `;
     }).join('');
@@ -166,38 +213,18 @@ function renderScreenerTable(results) {
         return;
     }
 
-    tbody.innerHTML = results.slice(0, 100).map(r => `
+    tbody.innerHTML = results.map(r => `
         <tr>
-            <td class="t-code">${r.kode_saham}</td>
-            <td title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
-            <td class="right">${r.per_x}</td>
-            <td class="right">${r.pbvr_x}</td>
-            <td class="right">${r.roe_pct}</td>
-            <td class="right">${r.roa_pct}</td>
-            <td class="right">${r.der_x}</td>
-            <td class="right">${formatMoney(r.market_cap)}</td>
+            <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
+            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
+            <td class="right" data-value="${r.pe}">${r.pe.toFixed(2)}</td>
+            <td class="right" data-value="${r.pbv}">${r.pbv.toFixed(2)}</td>
+            <td class="right" data-value="${r.roe}">${r.roe.toFixed(2)}</td>
+            <td class="right" data-value="${r.roa}">${r.roa.toFixed(2)}</td>
+            <td class="right" data-value="${r.der}">${r.der.toFixed(2)}</td>
+            <td class="right" data-value="${r.mc}">${formatMoney(r.mc)}</td>
         </tr>
     `).join('');
-}
-
-function renderBrokersTable(results) {
-    const tbody = document.querySelector('#table-brokers tbody');
-    if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="center">No data available</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = results.slice(0, 100).map(r => {
-        let netLots = parseFloat(r.net_lots || 0);
-        let colorClass = netLots > 0 ? 'txt-green' : (netLots < 0 ? 'txt-red' : '');
-        return `
-        <tr>
-            <td class="t-code">${r.kode_broker}</td>
-            <td class="right">${formatNum(r.net_buy_vol)}</td>
-            <td class="right">${formatNum(r.net_sell_vol)}</td>
-            <td class="right ${colorClass}">${formatNum(netLots)}</td>
-        </tr>
-    `}).join('');
 }
 
 function renderShareholdersTable(results) {
@@ -208,20 +235,67 @@ function renderShareholdersTable(results) {
     }
 
     tbody.innerHTML = results.map(r => {
-        let chg = parseFloat(r.perubahan?.replace(/,/g, '')) || 0;
-        let colorClass = chg > 0 ? 'txt-green' : (chg < 0 ? 'txt-red' : '');
-        let sign = chg > 0 ? '+' : '';
+        // change logic
+        let chgNum = parseFloat(r.perubahan?.replace(/,/g, '')) || 0;
+        let shares = parseFloat(r.jumlah_saham_current?.replace(/,/g, '')) || 0;
+        let pct = parseFloat(r.pct_current?.replace(/,/g, '')) || 0;
+        
+        let colorClass = chgNum > 0 ? 'txt-green' : (chgNum < 0 ? 'txt-red' : '');
+        let sign = chgNum > 0 ? '+' : '';
+        let rDate = r.report_date.split('T')[0];
+
         return `
         <tr>
-            <td>${r.report_date.split('T')[0]}</td>
-            <td class="t-code">${r.kode_emiten}</td>
-            <td title="${r.nama_pemegang_saham}">${r.nama_pemegang_saham.length > 30 ? r.nama_pemegang_saham.substring(0,30)+'...' : r.nama_pemegang_saham}</td>
-            <td>${r.jenis || '-'} ${r.status || ''}</td>
-            <td class="right">${r.jumlah_saham_current}</td>
-            <td class="right">${r.pct_current}</td>
-            <td class="right ${colorClass}">${sign}${r.perubahan}</td>
+            <td data-value="${rDate}">${rDate}</td>
+            <td class="t-code" data-value="${r.kode_emiten}">${r.kode_emiten}</td>
+            <td data-value="${r.nama_pemegang_saham}" title="${r.nama_pemegang_saham}">${r.nama_pemegang_saham.length > 25 ? r.nama_pemegang_saham.substring(0,25)+'...' : r.nama_pemegang_saham}</td>
+            <td data-value="${r.jenis}">${r.jenis || '-'} ${r.status || ''}</td>
+            <td class="right" data-value="${shares}">${formatNum(shares)}</td>
+            <td class="right" data-value="${pct}">${pct.toFixed(2)}</td>
+            <td class="right ${colorClass}" data-value="${chgNum}">${sign}${formatNum(chgNum)}</td>
         </tr>
     `}).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+// COLUMN SORTING
+// ─────────────────────────────────────────────────────────────
+
+function setupTableSorting() {
+    document.querySelectorAll('table.sortable th').forEach(th => {
+        th.addEventListener('click', () => {
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            if (rows.length === 0 || rows[0].querySelector('.center')) return; // empty or loading
+
+            const index = Array.from(th.parentNode.children).indexOf(th);
+            const isAsc = th.classList.contains('asc');
+            const type = th.getAttribute('data-type') || 'string';
+
+            // Reset all th classes
+            table.querySelectorAll('th').forEach(h => h.classList.remove('asc', 'desc'));
+            th.classList.toggle('asc', !isAsc);
+            th.classList.toggle('desc', isAsc);
+
+            rows.sort((a, b) => {
+                let cellA = a.children[index];
+                let cellB = b.children[index];
+                if(!cellA || !cellB) return 0;
+
+                let valA = cellA.getAttribute('data-value') || cellA.textContent.trim();
+                let valB = cellB.getAttribute('data-value') || cellB.textContent.trim();
+
+                if (type === 'number') {
+                    return isAsc ? valA - valB : valB - valA;
+                } else {
+                    return isAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+            });
+
+            rows.forEach(r => tbody.appendChild(r));
+        });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -236,40 +310,60 @@ function updateTimestamp() {
 function initTabs() {
     tabs.forEach(btn => {
         btn.addEventListener('click', () => {
-            // Remove active classes
             tabs.forEach(t => t.classList.remove('active'));
             tabPanes.forEach(p => p.classList.remove('active'));
             
-            // Add active to clicked
             btn.classList.add('active');
             const targetId = btn.getAttribute('data-target');
             document.getElementById(targetId).classList.add('active');
 
-            // Load data if not loaded
             loadTabContent(targetId);
         });
     });
 }
 
+function setSyncing(isSyncing) {
+    if(isSyncing) {
+        refreshBtn.classList.add('syncing');
+        syncText.textContent = "Syncing...";
+        lastUpdated.textContent = "Fetching new data...";
+    } else {
+        refreshBtn.classList.remove('syncing');
+        syncText.textContent = "Sync";
+        updateTimestamp();
+    }
+}
+
+async function startSync() {
+    setSyncing(true);
+    
+    // Reset state
+    Object.keys(loadedTabs).forEach(k => loadedTabs[k] = false);
+    document.querySelectorAll('tbody').forEach(el => el.innerHTML = '<tr><td colspan="8" class="center"><div class="loader inline"></div></td></tr>');
+    
+    await loadMarketSummary();
+    
+    // Reload currently active tab if not summary
+    const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-target');
+    if (activeTab !== 'tab-summary') {
+        await loadTabContent(activeTab);
+    }
+    
+    setSyncing(false);
+}
+
 function init() {
     initTabs();
+    setupTableSorting();
     
     // Initial Load
-    loadMovers();
-    loadBreadth(); // Also loads 'tab-summary'
+    startSync();
 
     // Refresh btn
     refreshBtn.addEventListener('click', () => {
-        // Reset state
-        Object.keys(loadedTabs).forEach(k => loadedTabs[k] = false);
-        document.querySelectorAll('tbody').forEach(el => el.innerHTML = '<tr><td colspan="8" class="center"><div class="loader inline"></div></td></tr>');
-        
-        loadMovers();
-        loadBreadth();
-        
-        // Reload currently active tab
-        const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-target');
-        loadTabContent(activeTab);
+        if (!refreshBtn.classList.contains('syncing')) {
+            startSync();
+        }
     });
 }
 
