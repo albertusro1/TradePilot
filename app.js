@@ -6,11 +6,13 @@ const API_KEY = 'dev_secret_key';
 const refreshBtn = document.getElementById('refresh-btn');
 const syncText = document.getElementById('sync-text');
 const lastUpdated = document.getElementById('last-updated');
+const searchInput = document.getElementById('search-code');
 const tabs = document.querySelectorAll('.tab-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
 
 // State tracking
 let globalMarketData = null; // Cache to avoid refetching /market/summary
+let globalScreenerData = null; // Cache to avoid refetching /market/screener
 const loadedTabs = {
     'tab-summary': false,
     'tab-screener': false,
@@ -178,21 +180,30 @@ async function loadTabContent(targetId) {
     if (targetId === 'tab-screener') {
         const data = await fetchAPI('/market/screener');
         if (data) {
-            const mapped = data.results.map(r => ({
+            globalScreenerData = data.results.map(r => ({
                 kode_saham: r.kode_saham,
                 nama_perusahaan: r.nama_perusahaan,
+                sektor: r.sektor || '-',
+                industri: r.industri || '-',
                 pe: parseIndoNum(r.per),
                 pbv: parseIndoNum(r.pbv),
                 roe: parseIndoNum(r.roe_pct),
                 roa: parseIndoNum(r.roa_pct),
+                npm: parseIndoNum(r.npm_pct),
                 der: parseIndoNum(r.der),
                 mc: parseIndoNum(r.mkt_cap)
             }));
-            renderScreenerTable(mapped);
+            
+            const q = searchInput.value.trim().toUpperCase();
+            if (q) {
+                renderScreenerTable(globalScreenerData.filter(s => s.kode_saham.includes(q)));
+            } else {
+                renderScreenerTable(globalScreenerData);
+            }
         }
     } 
     else if (targetId === 'tab-shareholders') {
-        const data = await fetchAPI('/market/shareholders?page=1&per_page=150');
+        const data = await fetchAPI('/market/shareholders?page=1&per_page=2000');
         if (data) renderShareholdersTable(data.results);
     }
 
@@ -243,13 +254,14 @@ function renderSummaryTable(results) {
 function renderScreenerTable(results) {
     const tbody = document.querySelector('#table-screener tbody');
     if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="center">No data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="center">No data available</td></tr>';
         return;
     }
 
     tbody.innerHTML = results.map(r => {
         let roeColor = r.roe > 0 ? 'txt-green' : (r.roe < 0 ? 'txt-red' : '');
         let roaColor = r.roa > 0 ? 'txt-green' : (r.roa < 0 ? 'txt-red' : '');
+        let npmColor = r.npm > 0 ? 'txt-green' : (r.npm < 0 ? 'txt-red' : '');
         let derColor = r.der > 2 ? 'txt-red' : (r.der > 0 && r.der <= 1 ? 'txt-green' : '');
         let peColor = r.pe > 0 && r.pe < 15 ? 'txt-green' : (r.pe > 25 || r.pe < 0 ? 'txt-red' : '');
         
@@ -257,10 +269,13 @@ function renderScreenerTable(results) {
         <tr>
             <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
             <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 25 ? r.nama_perusahaan.substring(0,25)+'...' : r.nama_perusahaan}</td>
+            <td data-value="${r.sektor}">${r.sektor}</td>
+            <td data-value="${r.industri}">${r.industri.length > 20 ? r.industri.substring(0,20)+'...' : r.industri}</td>
             <td class="right ${peColor}" data-value="${r.pe}">${r.pe.toFixed(2)}</td>
             <td class="right" data-value="${r.pbv}">${r.pbv.toFixed(2)}</td>
             <td class="right ${roeColor}" data-value="${r.roe}">${r.roe.toFixed(2)}</td>
             <td class="right ${roaColor}" data-value="${r.roa}">${r.roa.toFixed(2)}</td>
+            <td class="right ${npmColor}" data-value="${r.npm}">${r.npm.toFixed(2)}</td>
             <td class="right ${derColor}" data-value="${r.der}">${r.der.toFixed(2)}</td>
             <td class="right" data-value="${r.mc}">${formatMoney(r.mc)}</td>
         </tr>
@@ -417,6 +432,27 @@ async function startSync() {
 function init() {
     initTabs();
     setupTableSorting();
+    
+    // Setup Search Logic
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim().toUpperCase();
+        const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-target');
+        
+        if (activeTab === 'tab-summary' && globalMarketData) {
+            if (query === '') {
+                renderSummaryTable(globalMarketData);
+            } else {
+                renderSummaryTable(globalMarketData.filter(s => s.kode_saham.includes(query)));
+            }
+        } else if (activeTab === 'tab-screener' && globalScreenerData) {
+            if (query === '') {
+                renderScreenerTable(globalScreenerData);
+            } else {
+                renderScreenerTable(globalScreenerData.filter(s => s.kode_saham.includes(query)));
+            }
+        }
+        // Exclude shareholders filter purposely
+    });
     
     // Initial Load
     startSync();

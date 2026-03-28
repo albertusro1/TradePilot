@@ -18,6 +18,7 @@
                 <h1>TradePilot <span class="badge">PRO</span></h1>
             </div>
             <div class="controls">
+                <input type="text" id="search-code" class="search-input" placeholder="Search Code..." autocomplete="off">
                 <span id="trading-date" class="badge" title="Market Data Trading Date">Date: --</span>
                 <span id="last-updated">Updating data...</span>
                 <button id="refresh-btn" class="glow-btn">
@@ -71,7 +72,7 @@
             <section class="data-section glass-card slide-up">
                 <div class="tabs">
                     <button class="tab-btn active" data-target="tab-summary">Market Summary</button>
-                    <button class="tab-btn" data-target="tab-screener">Stock Screener</button>
+                    <button class="tab-btn" data-target="tab-screener">Fundamental Data</button>
                     <button class="tab-btn" data-target="tab-shareholders">5% Shareholders</button>
                 </div>
 
@@ -113,10 +114,13 @@
                                     <tr>
                                         <th data-type="string">Code ↕</th>
                                         <th data-type="string">Name ↕</th>
+                                        <th data-type="string">Sector ↕</th>
+                                        <th data-type="string">Industry ↕</th>
                                         <th class="right" data-type="number">P/E ↕</th>
                                         <th class="right" data-type="number">PBV ↕</th>
                                         <th class="right" data-type="number">ROE (%) ↕</th>
                                         <th class="right" data-type="number">ROA (%) ↕</th>
+                                        <th class="right" data-type="number">NPM (%) ↕</th>
                                         <th class="right" data-type="number">DER ↕</th>
                                         <th class="right" data-type="number">Mkt Cap ↕</th>
                                     </tr>

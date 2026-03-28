@@ -141,6 +141,28 @@ body {
     100% { transform: rotate(360deg); }
 }
 
+.search-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-glow);
+    color: var(--text-main);
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-family: 'Outfit', sans-serif;
+    outline: none;
+    transition: var(--transition);
+    width: 200px;
+}
+
+.search-input:focus {
+    background: rgba(14, 219, 212, 0.1);
+    box-shadow: 0 0 10px var(--border-glow);
+}
+.search-input::placeholder {
+    color: var(--text-muted);
+}
+
 /* Sections Layout */
 .movers-section {
     display: grid;
