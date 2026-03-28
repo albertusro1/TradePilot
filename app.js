@@ -11,17 +11,9 @@ const searchScreener = document.getElementById('search-screener');
 const tabs = document.querySelectorAll('.tab-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
 
-// Admin Elements
-const triggerScrapeBtn = document.getElementById('trigger-scrape-btn');
-const adminStatus = document.getElementById('admin-status');
-const adminLastRun = document.getElementById('admin-last-run');
-const adminHealth = document.getElementById('admin-health');
-const terminalLogs = document.getElementById('terminal-logs');
-
 // State tracking
 let globalMarketData = null; // Cache to avoid refetching /market/summary
 let globalScreenerData = null; // Cache to avoid refetching /market/screener
-let scraperPollInterval = null;
 let selectedSectors = [];
 let selectedIndustries = [];
 const loadedTabs = {
@@ -224,14 +216,6 @@ async function loadTabContent(targetId) {
         if (data) renderShareholdersTable(data.results);
     }
 
-    if (targetId === 'tab-admin') {
-        pollScraperStatus();
-        if (!scraperPollInterval) scraperPollInterval = setInterval(pollScraperStatus, 2000);
-    } else if (scraperPollInterval) {
-        clearInterval(scraperPollInterval);
-        scraperPollInterval = null;
-    }
-
     loadedTabs[targetId] = true;
 }
 
@@ -275,36 +259,6 @@ function initMultiSelect(elementId, items, selectedArray) {
 }
 
 document.addEventListener('click', () => document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none'));
-
-triggerScrapeBtn.addEventListener('click', async () => {
-    if (!confirm('This will trigger a full Node.js Puppeteer scrape. Continue?')) return;
-    triggerScrapeBtn.textContent = '▶ TRIGGERING...'; triggerScrapeBtn.style.opacity = '0.5';
-    try { await fetch('http://localhost:8080/api/v1/scraper/trigger', { method: 'POST', headers: { 'X-API-Key': 'dev_secret_key'} }); } catch (e) { alert('Failed: ' + e.message); }
-    setTimeout(() => { triggerScrapeBtn.textContent = '▶ FORCE SCRAPE NOW'; triggerScrapeBtn.style.opacity = '1'; }, 2000);
-});
-
-async function pollScraperStatus() {
-    try {
-        const res = await fetch('http://localhost:8080/api/v1/scraper/status', { headers: { 'X-API-Key': 'dev_secret_key' } });
-        if (!res.ok) throw new Error('API down');
-        const data = await res.json();
-        
-        adminStatus.textContent = data.is_running ? 'RUNNING' : data.status;
-        adminStatus.className = 'value ' + (data.is_running ? 'txt-blue' : (data.status.includes('Fail') ? 'txt-red' : ''));
-        adminLastRun.textContent = data.last_run || '--';
-        adminHealth.textContent = 'Online'; adminHealth.className = 'value txt-green';
-        
-        if (data.logs && data.logs.length > 0) {
-            terminalLogs.innerHTML = data.logs.join('<br>');
-            terminalLogs.parentElement.scrollTop = terminalLogs.parentElement.scrollHeight;
-        } else {
-            terminalLogs.innerHTML = 'System Idle. Awaiting commands...';
-        }
-    } catch (e) {
-        adminHealth.textContent = 'Disconnected'; adminHealth.className = 'value txt-red';
-        terminalLogs.innerHTML = `<span class="txt-red">[ERROR]</span> Backend connection lost.`;
-    }
-}
 
 // ─────────────────────────────────────────────────────────────
 // TABLE RENDERERS

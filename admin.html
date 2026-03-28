@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradePilot PRO - Scraper Admin</title>
+    <!-- Use the existing dashboard stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar layout maintained for consistency -->
+        <aside class="sidebar" style="width: 250px;">
+            <div class="brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <h2>TradePilot</h2>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="nav-item">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    Dashboard
+                </a>
+                <a href="admin.html" class="nav-item active">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    Scraper Admin
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" style="padding: 30px;">
+            <header class="header" style="margin-bottom: 30px; border-bottom: 1px solid var(--border-glow); padding-bottom: 20px;">
+                <div class="title">
+                    <h1>System Engine <span class="badge">ADMIN</span></h1>
+                </div>
+                <div class="controls">
+                    <a href="index.html" class="glow-btn" style="text-decoration: none; display: flex; align-items: center; gap: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back to Dashboard
+                    </a>
+                </div>
+            </header>
+
+            <section class="admin-section glass-card" style="padding: 25px;">
+                <div class="admin-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                    <div>
+                        <h2 style="font-size: 1.5rem; margin-bottom: 8px;">Scraper Orchestration</h2>
+                        <p class="txt-muted" style="margin:0;">Manually trigger backend scraping jobs across the IDX gateway and monitor realtime Node.js execution logs.</p>
+                    </div>
+                    <button id="trigger-scrape-btn" class="glow-btn" style="padding: 12px 24px; font-size: 1rem; border-color: var(--green); font-weight: 600;">▶ FORCE SCRAPE NOW</button>
+                </div>
+                
+                <div class="status-cards" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px;">
+                    <div class="stat glass-card" style="padding: 20px;"><span class="label">Worker Status</span><span class="value" id="admin-status" style="font-size: 1.5rem;">Idle</span></div>
+                    <div class="stat glass-card" style="padding: 20px;"><span class="label">Last Successful Run</span><span class="value" id="admin-last-run" style="font-size: 1.5rem;">--</span></div>
+                    <div class="stat glass-card" style="padding: 20px;"><span class="label">Database Connection</span><span class="value txt-green" id="admin-health" style="font-size: 1.5rem;">Online</span></div>
+                </div>
+
+                <div class="terminal-container" style="background: rgba(5, 10, 20, 0.95); border: 1px solid var(--border-glow); border-radius: 8px; overflow: hidden;">
+                    <div class="terminal-header" style="background: rgba(255, 255, 255, 0.05); padding: 10px 15px; border-bottom: 1px solid var(--border-glow); display: flex; gap: 8px; align-items: center;">
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f56;"></div>
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></div>
+                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #27c93f;"></div>
+                        <span style="margin-left: 10px; font-family: monospace; font-size: 0.8rem; color: #888;">root@idx-scraper-worker:~</span>
+                    </div>
+                    <div class="terminal-window" style="padding: 20px; height: 450px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.9rem; color: #a9b7c6; scroll-behavior: smooth; line-height: 1.5;">
+                        <div id="terminal-logs">Initializing connection to backend zero-downtime scraper service...</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Admin Logic -->
+    <script src="admin.js"></script>
+</body>
+</html>
