@@ -24,14 +24,14 @@ const loadedTabs = {
 };
 
 // Utilities for Indonesian number format ("1.500" -> 1500)
-const parseIndoNum = (str) => {
-    if (!str) return 0;
+const parseIndoNum = (str, returnNull = false) => {
+    if (!str || str.trim() === '-' || str.trim() === '') return returnNull ? null : 0;
     // Remove all dots, convert commas to dots
     let val = str.replace(/\./g, '').replace(/,/g, '.');
     // Remove newlines and tabs from IDX bad data (e.g. "=\n\t\t\t\t0")
     val = val.replace(/[\n\t= ]/g, '');
     let num = parseFloat(val);
-    return isNaN(num) ? 0 : num;
+    return isNaN(num) ? (returnNull ? null : 0) : num;
 };
 
 const formatNum = (num) => new Intl.NumberFormat('en-US').format(num);
@@ -194,13 +194,13 @@ async function loadTabContent(targetId) {
                 nama_perusahaan: r.nama_perusahaan,
                 sektor: r.sektor || '-',
                 industri: r.industri || '-',
-                pe: parseIndoNum(r.per),
-                pbv: parseIndoNum(r.pbv),
-                roe: parseIndoNum(r.roe_pct),
-                roa: parseIndoNum(r.roa_pct),
-                npm: parseIndoNum(r.npm_pct),
-                der: parseIndoNum(r.der),
-                mc: parseIndoNum(r.mkt_cap)
+                pe: parseIndoNum(r.per, true),
+                pbv: parseIndoNum(r.pbv, true),
+                roe: parseIndoNum(r.roe_pct, true),
+                roa: parseIndoNum(r.roa_pct, true),
+                npm: parseIndoNum(r.npm_pct, true),
+                der: parseIndoNum(r.der, true),
+                mc: parseIndoNum(r.mkt_cap, true)
             }));
             
             const sectors = [...new Set(globalScreenerData.map(r => r.sektor).filter(s => s !== '-'))].sort();
@@ -318,6 +318,7 @@ function renderScreenerTable(results) {
         let npmColor = r.npm > 0 ? 'txt-green' : (r.npm < 0 ? 'txt-red' : '');
         let derColor = r.der > 2 ? 'txt-red' : (r.der > 0 && r.der <= 1 ? 'txt-green' : '');
         let peColor = r.pe > 0 && r.pe < 15 ? 'txt-green' : (r.pe > 25 || r.pe < 0 ? 'txt-red' : '');
+        let formatVal = (v) => v === null ? '-' : v.toFixed(2);
         
         return `
         <tr>
@@ -325,13 +326,13 @@ function renderScreenerTable(results) {
             <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 18 ? r.nama_perusahaan.substring(0,18)+'...' : r.nama_perusahaan}</td>
             <td data-value="${r.sektor}">${r.sektor}</td>
             <td data-value="${r.industri}">${r.industri.length > 18 ? r.industri.substring(0,18)+'...' : r.industri}</td>
-            <td class="right ${peColor}" data-value="${r.pe}">${r.pe.toFixed(2)}</td>
-            <td class="right" data-value="${r.pbv}">${r.pbv.toFixed(2)}</td>
-            <td class="right ${roeColor}" data-value="${r.roe}">${r.roe.toFixed(2)}</td>
-            <td class="right ${roaColor}" data-value="${r.roa}">${r.roa.toFixed(2)}</td>
-            <td class="right ${npmColor}" data-value="${r.npm}">${r.npm.toFixed(2)}</td>
-            <td class="right ${derColor}" data-value="${r.der}">${r.der.toFixed(2)}</td>
-            <td class="right" data-value="${r.mc}">${formatMoney(r.mc)}</td>
+            <td class="right ${peColor}" data-value="${r.pe}">${formatVal(r.pe)}</td>
+            <td class="right" data-value="${r.pbv}">${formatVal(r.pbv)}</td>
+            <td class="right ${roeColor}" data-value="${r.roe}">${formatVal(r.roe)}</td>
+            <td class="right ${roaColor}" data-value="${r.roa}">${formatVal(r.roa)}</td>
+            <td class="right ${npmColor}" data-value="${r.npm}">${formatVal(r.npm)}</td>
+            <td class="right ${derColor}" data-value="${r.der}">${formatVal(r.der)}</td>
+            <td class="right" data-value="${r.mc}">${r.mc === null ? '-' : formatMoney(r.mc)}</td>
         </tr>
     `}).join('');
 }
@@ -373,9 +374,9 @@ function renderShareholdersTable(results) {
             <td class="t-code" data-value="${r.kode_emiten}">${r.kode_emiten}</td>
             <td data-value="${r.nama_pemegang_saham}" title="${r.nama_pemegang_saham}">${r.nama_pemegang_saham.length > 20 ? r.nama_pemegang_saham.substring(0,20)+'...' : r.nama_pemegang_saham}</td>
             <td data-value="${r.jenis}">${r.jenis || '-'} ${r.status || ''}</td>
-            <td class="right" data-value="${shares}">${formatNum(shares)}</td>
-            <td class="right" data-value="${pct}">${pct.toFixed(2)}</td>
-            <td class="right ${colorClass}" data-value="${changeShares}" title="Idx Raw Data: ${rawChg}">
+            <td class="right" data-value="${sharesCurr}">${formatNum(sharesCurr)}</td>
+            <td class="right" data-value="${pctCurr}">${pctCurr.toFixed(2)}</td>
+            <td class="right ${colorClass}" data-value="${changeShares}" title="Idx Raw Data: ${r.perubahan}">
                 ${sign}${formatNum(changeShares)} <br>
                 <small>(${sign}${changePct.toFixed(2)}%)</small>
             </td>
