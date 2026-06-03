@@ -14,6 +14,7 @@ const tabPanes = document.querySelectorAll('.tab-pane');
 // State tracking
 let globalMarketData = null; // Cache to avoid refetching /market/summary
 let globalScreenerData = null; // Cache to avoid refetching /market/screener
+let globalShareholdersData = null; // Cache for AI Engine
 let selectedSectors = [];
 let selectedIndustries = [];
 const loadedTabs = {
@@ -212,8 +213,11 @@ async function loadTabContent(targetId) {
         }
     } 
     else if (targetId === 'tab-shareholders') {
-        const data = await fetchAPI('/market/shareholders?page=1&per_page=2000');
-        if (data) renderShareholdersTable(data.results);
+        if (!globalShareholdersData) {
+            const data = await fetchAPI('/market/shareholders?page=1&per_page=2000');
+            if (data) globalShareholdersData = data.results;
+        }
+        if (globalShareholdersData) renderShareholdersTable(globalShareholdersData);
     }
 
     loadedTabs[targetId] = true;
@@ -340,27 +344,22 @@ function renderShareholdersTable(results) {
     }
 
     tbody.innerHTML = results.map(r => {
-        let rawChg = r.perubahan || '0';
-        let chgNum = parseFloat(rawChg.replace(/,/g, '')) || 0;
+        let sharesPrev = parseIndoNum(r.jumlah_saham_previous);
+        let sharesCurr = parseIndoNum(r.jumlah_saham_current);
+        let pctPrev = parseIndoNum(r.pct_previous);
+        let pctCurr = parseIndoNum(r.pct_current);
         
-        let shares = parseFloat(r.jumlah_saham_current?.replace(/,/g, '')) || 0;
-        let pct = parseFloat(r.pct_current?.replace(/,/g, '')) || 0;
+        let changeShares = sharesCurr - sharesPrev;
+        let changePct = pctCurr - pctPrev;
         
-        // Detect if raw changes from IDX PDF are percentages or absolute shares
-        let isPercentageOrig = rawChg.includes('%') || rawChg.includes('.') || Math.abs(chgNum) === pct;
-        
-        let changeShares = 0;
-        let changePct = 0;
-        
-        if (pct > 0 && shares > 0) {
-            let totalCompanyShares = shares / (pct / 100);
-            
-            if (isPercentageOrig) {
-                changePct = chgNum;
-                changeShares = Math.round((changePct / 100) * totalCompanyShares);
-            } else {
-                changeShares = chgNum;
-                changePct = (changeShares / totalCompanyShares) * 100;
+        if (sharesPrev === 0 && r.perubahan) {
+            // Fallback for cases where previous column was missed but change is present
+            let chgNum = parseIndoNum(r.perubahan);
+            changeShares = chgNum;
+            // Calculate changePct relative to total company size if possible
+            if (pctCurr > 0 && sharesCurr > 0) {
+                let total = sharesCurr / (pctCurr / 100);
+                changePct = (changeShares / total) * 100;
             }
         }
         
@@ -468,8 +467,19 @@ async function startSync() {
     Object.keys(loadedTabs).forEach(k => loadedTabs[k] = false);
     document.querySelectorAll('tbody').forEach(el => el.innerHTML = '<tr><td colspan="8" class="center"><div class="loader inline"></div></td></tr>');
     
-    await loadMarketSummary();
-    
+    // Concurrently fetch all baseline models to power the UI & AI Recommendation Engine
+    const [marketOK, rawScreener, rawShares] = await Promise.all([
+        loadMarketSummary(),
+        fetchAPI('/market/screener'),
+        fetchAPI('/market/shareholders?page=1&per_page=2000')
+    ]);
+
+    if (rawScreener && rawScreener.results) globalScreenerData = rawScreener.results;
+    if (rawShares && rawShares.results) globalShareholdersData = rawShares.results;
+
+    // Fire Trade Recommender (reads from backend API)
+    await generateTradeRecommendations();
+
     // Reload currently active tab if not summary
     const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-target');
     if (activeTab !== 'tab-summary') {
@@ -477,6 +487,123 @@ async function startSync() {
     }
     
     setSyncing(false);
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI TRADE RECOMMENDATIONS ENGINE  (Unified — reads from backend)
+// ─────────────────────────────────────────────────────────────
+async function generateTradeRecommendations() {
+    const elWhale = document.getElementById('signal-whale');
+    const elForeign = document.getElementById('signal-foreign');
+    const elTech = document.getElementById('signal-tech');
+    const elLedger = document.getElementById('ai-ledger-compact');
+    if (!elWhale) return;
+
+    const data = await fetchAPI('/recommendations/history');
+    const recs = (data && data.results) ? data.results : [];
+
+    const byType = {};
+
+    // Group by signal type, prioritize the first active one we see
+    recs.forEach(r => {
+        if (!byType[r.signal_type]) {
+            byType[r.signal_type] = r;
+        } else if (!byType[r.signal_type].is_active && r.is_active) {
+            // Prefer active over stopped if both exist in history
+            byType[r.signal_type] = r;
+        }
+    });
+
+    const renderCard = (el, r, fallbackMsg) => {
+        if (!r) {
+            el.innerHTML = `<div class="txt-muted" style="font-size: 0.8rem; height: 100%; display: flex; align-items: center;">${fallbackMsg}</div>`;
+            return;
+        }
+        
+        const pnl = parseFloat(r.pct_change) || 0;
+        const pnlColor = pnl > 0 ? 'var(--neon-green)' : pnl < 0 ? '#ef4444' : 'var(--text-muted)';
+        const badgeColor = r.is_active ? 'rgba(56, 189, 248, 0.2)' : '#ef444422';
+        const badgeText = r.is_active ? `Entry: ${formatNum(r.entry_price)}` : `STOPPED @ ${formatNum(r.current_price)}`;
+        const textColor = r.is_active ? 'var(--neon-blue)' : '#ef4444';
+
+        el.innerHTML = `
+            <div>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+                    <span class="t-code" style="font-size: 1.1rem;">${r.kode_saham}</span> 
+                    <span class="badge" style="background:${badgeColor}; color:${textColor}; border: 1px solid ${textColor}44;">${badgeText}</span>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                    ${r.is_active ? `Current: <span style="color:#a9b7c6">${formatNum(r.current_price)}</span>` : `<span style="color:#ef4444">Exit: ${r.stop_out_date}</span>`} 
+                    &bull; P&L: <span style="color:${pnlColor}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</span>
+                </div>
+                <div style="background: rgba(0,0,0,0.3); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem; color: var(--text-muted); margin-top: auto;">
+                    <strong style="color:var(--text-main)">Strategy:</strong> <br>${r.target_zone}
+                </div>
+            </div>
+        `;
+    };
+
+    renderCard(elWhale, byType['Whale Accumulation'], 'No Whale accumulation traits detected today.');
+    renderCard(elForeign, byType['Institutional Flow'], 'Sideways flow. No high-volume foreign buying.');
+    renderCard(elTech, byType['Technical Pulse'], 'No valid volume breakouts detected.');
+
+    renderCompactLedger(recs);
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMPACT AI PERFORMANCE LEDGER (right-side card)
+// ─────────────────────────────────────────────────────────────
+function renderCompactLedger(data) {
+    const el = document.getElementById('ai-ledger-compact');
+    if (!el) return;
+
+    if (!data || data.length === 0) {
+        el.innerHTML = '<div class="txt-muted" style="font-size: 0.78rem; text-align:center; padding: 20px 0;">No signals yet. Trigger a scrape to generate AI picks.</div>';
+        return;
+    }
+
+    // Only show top 5 on dashboard — full list on tracker.html
+    const displayData = data.slice(0, 5);
+
+    el.innerHTML = displayData.map(r => {
+        const pnl = parseFloat(r.pct_change) || 0;
+        const pnlColor = pnl > 0 ? 'var(--neon-green)' : pnl < 0 ? '#ef4444' : 'var(--text-muted)';
+        const pnlText = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
+
+        const signalColor = r.signal_type === 'Whale Accumulation' ? '#8b5cf6'
+            : r.signal_type === 'Institutional Flow' ? 'var(--neon-blue)'
+            : 'var(--neon-green)';
+
+        const shortLabel = r.signal_type === 'Whale Accumulation' ? 'WHALE'
+            : r.signal_type === 'Institutional Flow' ? 'FLOW'
+            : 'TECH';
+
+        let statusBadge = '';
+        if (!r.is_active) {
+            statusBadge = `<span style="font-size:0.65rem; padding: 1px 4px; border-radius:3px; background:#ef444422; color:#ef4444; border:1px solid #ef444444; margin-left: 5px;">STOPPED (${r.stop_out_date})</span>`;
+        }
+
+        let peakInfo = '';
+        if (r.max_profit_pct > 0) {
+            peakInfo = `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">Peak: <span style="color:var(--neon-green)">+${r.max_profit_pct.toFixed(2)}%</span> on ${r.max_profit_date || '--'}</div>`;
+        }
+
+        return `
+        <div class="ai-rec-row" style="flex-direction: column; align-items: stretch; padding: 8px 10px; height: auto;">
+            <div style="display:flex; align-items:center; justify-content: space-between;">
+                <div style="display:flex; align-items:center;">
+                    <span class="ai-rec-code">${r.kode_saham}</span>
+                    <span class="ai-rec-signal" style="background:${signalColor}18; color:${signalColor}; border:1px solid ${signalColor}44; margin-left:8px;">${shortLabel}</span>
+                    ${statusBadge}
+                </div>
+                <span class="ai-rec-pnl" style="color:${pnlColor}; font-weight:bold;">${pnlText}</span>
+            </div>
+            <div style="display:flex; justify-content: space-between; margin-top: 4px; font-size: 0.75rem; color: #a9b7c6;">
+                <span>Entry: ${formatNum(r.entry_price)} <span style="color:var(--text-muted); font-size:0.65rem;">(${r.date})</span> &bull; Current: ${formatNum(r.current_price)}</span>
+            </div>
+            ${peakInfo}
+        </div>`;
+    }).join('');
 }
 
 function init() {

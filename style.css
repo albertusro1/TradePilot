@@ -59,11 +59,48 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
-    background: var(--bg-card);
-    backdrop-filter: blur(16px);
+    padding: 0.75rem 1.5rem;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(20px);
     border: 1px solid var(--border-light);
-    border-radius: 12px;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.nav-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nav-link {
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 8px;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid transparent;
+}
+
+.nav-link:hover {
+    color: var(--text-main);
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.1);
+}
+
+.nav-link.active {
+    color: var(--neon-blue);
+    background: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.nav-link svg {
+    opacity: 0.7;
 }
 
 .logo {
@@ -93,12 +130,35 @@ body {
     border-radius: 4px;
     font-weight: 700;
     letter-spacing: 0.05em;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+.market-date-badge {
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: var(--neon-blue);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .controls {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: 1.25rem;
+}
+
+.meta-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-left: 1.25rem;
+    border-left: 1px solid var(--border-light);
 }
 
 #last-updated {
@@ -502,6 +562,113 @@ tr:hover td {
 
 @keyframes spin {
     100% { transform: rotate(360deg); }
+}
+
+/* AI Performance Card (replaces Market Activity) */
+.ai-performance-card {
+    overflow: hidden;
+}
+
+.market-stats-bar {
+    display: flex;
+    gap: 0;
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+    overflow: hidden;
+}
+
+.mini-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 6px;
+    border-right: 1px solid rgba(255,255,255,0.04);
+}
+
+.mini-stat:last-child {
+    border-right: none;
+}
+
+.mini-label {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+}
+
+.mini-value {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-top: 2px;
+    line-height: 1.2;
+}
+
+.ai-ledger-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 280px;
+    padding-right: 2px;
+}
+
+.ai-ledger-compact::-webkit-scrollbar {
+    width: 3px;
+}
+.ai-ledger-compact::-webkit-scrollbar-thumb {
+    background: rgba(139,92,246,0.3);
+    border-radius: 4px;
+}
+
+.ai-rec-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 6px;
+    transition: var(--transition);
+    border: 1px solid transparent;
+}
+
+.ai-rec-row:hover {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(139,92,246,0.2);
+}
+
+.ai-rec-code {
+    font-weight: 600;
+    color: var(--neon-blue);
+    font-size: 0.85rem;
+    min-width: 42px;
+}
+
+.ai-rec-signal {
+    font-size: 0.58rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.ai-rec-prices {
+    flex: 1;
+    text-align: right;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.ai-rec-pnl {
+    font-weight: 700;
+    font-size: 0.78rem;
+    min-width: 52px;
+    text-align: right;
 }
 
 /* Responsive */
