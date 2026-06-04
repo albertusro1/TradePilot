@@ -34,6 +34,15 @@ const parseIndoNum = (str, returnNull = false) => {
     return isNaN(num) ? (returnNull ? null : 0) : num;
 };
 
+// English number format ("3,200,142,830" -> 3200142830, "41.10" -> 41.1)
+const parseEngNum = (str) => {
+    if (!str) return 0;
+    let val = str.replace(/,/g, ''); // Remove thousand-separator commas
+    val = val.replace(/[\n\t= ]/g, '');
+    let num = parseFloat(val);
+    return isNaN(num) ? 0 : num;
+};
+
 const formatNum = (num) => new Intl.NumberFormat('en-US').format(num);
 const formatMoney = (num) => {
     if (num >= 1e12) return (num / 1e12).toFixed(2) + ' T';
@@ -345,17 +354,17 @@ function renderShareholdersTable(results) {
     }
 
     tbody.innerHTML = results.map(r => {
-        let sharesPrev = parseIndoNum(r.jumlah_saham_previous);
-        let sharesCurr = parseIndoNum(r.jumlah_saham_current);
-        let pctPrev = parseIndoNum(r.pct_previous);
-        let pctCurr = parseIndoNum(r.pct_current);
+        let sharesPrev = parseEngNum(r.jumlah_saham_previous);
+        let sharesCurr = parseEngNum(r.jumlah_saham_current);
+        let pctPrev = parseEngNum(r.pct_previous);
+        let pctCurr = parseEngNum(r.pct_current);
         
         let changeShares = sharesCurr - sharesPrev;
         let changePct = pctCurr - pctPrev;
         
         if (sharesPrev === 0 && r.perubahan) {
             // Fallback for cases where previous column was missed but change is present
-            let chgNum = parseIndoNum(r.perubahan);
+            let chgNum = parseEngNum(r.perubahan);
             changeShares = chgNum;
             // Calculate changePct relative to total company size if possible
             if (pctCurr > 0 && sharesCurr > 0) {
