@@ -354,28 +354,36 @@ function renderShareholdersTable(results) {
     }
 
     tbody.innerHTML = results.map(r => {
-        let sharesPrev = parseEngNum(r.jumlah_saham_previous);
         let sharesCurr = parseEngNum(r.jumlah_saham_current);
-        let pctPrev = parseEngNum(r.pct_previous);
         let pctCurr = parseEngNum(r.pct_current);
+        let pctPrev = parseEngNum(r.pct_previous);
         
-        let changeShares = sharesCurr - sharesPrev;
-        let changePct = pctCurr - pctPrev;
+        // Ownership percentage point change (e.g. 22.67% → 21.50% = -1.17 pp)
+        let changePct = pctPrev > 0 ? (pctCurr - pctPrev) : 0;
         
-        if (sharesPrev === 0 && r.perubahan) {
-            // Fallback for cases where previous column was missed but change is present
-            let chgNum = parseEngNum(r.perubahan);
-            changeShares = chgNum;
-            // Calculate changePct relative to total company size if possible
-            if (pctCurr > 0 && sharesCurr > 0) {
-                let total = sharesCurr / (pctCurr / 100);
-                changePct = (changeShares / total) * 100;
-            }
+        // Share change: use raw KSEI 'perubahan' field if available, else compute
+        let changeShares = 0;
+        if (r.perubahan && r.perubahan.trim() !== '') {
+            changeShares = parseEngNum(r.perubahan);
+        } else {
+            let sharesPrev = parseEngNum(r.jumlah_saham_previous);
+            changeShares = sharesCurr - sharesPrev;
         }
         
+        // Color based on share change direction
         let sign = changeShares > 0 ? '+' : '';
         let colorClass = changeShares > 0 ? 'txt-green' : (changeShares < 0 ? 'txt-red' : '');
         let rDate = r.report_date.split('T')[0];
+
+        // Format change cell
+        let changeDisplay;
+        if (changeShares === 0 && changePct === 0) {
+            changeDisplay = `<span class="txt-muted">—</span>`;
+        } else {
+            let pctSign = changePct > 0 ? '+' : '';
+            let pctDisplay = pctPrev > 0 ? `<br><small>(${pctSign}${changePct.toFixed(2)} pp)</small>` : '';
+            changeDisplay = `${sign}${formatNum(changeShares)}${pctDisplay}`;
+        }
 
         return `
         <tr>
@@ -385,9 +393,8 @@ function renderShareholdersTable(results) {
             <td data-value="${r.jenis}">${r.jenis || '-'} ${r.status || ''}</td>
             <td class="right" data-value="${sharesCurr}">${formatNum(sharesCurr)}</td>
             <td class="right" data-value="${pctCurr}">${pctCurr.toFixed(2)}</td>
-            <td class="right ${colorClass}" data-value="${changeShares}" title="Idx Raw Data: ${r.perubahan}">
-                ${sign}${formatNum(changeShares)} <br>
-                <small>(${sign}${changePct.toFixed(2)}%)</small>
+            <td class="right ${colorClass}" data-value="${changeShares}">
+                ${changeDisplay}
             </td>
         </tr>
     `}).join('');
