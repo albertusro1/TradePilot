@@ -86,6 +86,16 @@
                         <div class="loader"></div>
                     </div>
                 </div>
+
+                <div class="card glass-card top-rated">
+                    <div class="card-header">
+                        <h2>Leaderboard</h2>
+                        <span class="badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); color: var(--neon-green); font-size: 0.6rem;">TOP RATED</span>
+                    </div>
+                    <div class="movers-list" id="leaderboard-list">
+                        <div class="loader"></div>
+                    </div>
+                </div>
             </section>
 
             <!-- Main Tabular Data -->
@@ -195,20 +205,23 @@
                 </div>
             </section>
 
-            <!-- Stock Detail Hub (Slide Down on row click) -->
-            <section id="stock-detail-panel" class="glass-card slide-up" style="display: none; margin-top: 1.5rem; padding: 1.5rem;">
+            <!-- Stock Detail Hub (Side Drawer) -->
+            <section id="stock-detail-panel" class="glass-card">
                 <!-- Panel Header -->
-                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 1rem; margin-bottom: 1rem;">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-light); padding-bottom: 1rem; margin-bottom: 1.5rem;">
                     <div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <h2 id="detail-ticker" style="font-size: 2rem; font-weight: 700; color: var(--neon-blue); font-family: 'JetBrains Mono', monospace;">--</h2>
                             <span id="detail-grade" class="badge" style="font-size: 1rem; padding: 4px 10px; background: rgba(56, 189, 248, 0.1); color: var(--neon-blue); border: 1px solid var(--neon-blue);">Grade: --</span>
                         </div>
-                        <p id="detail-name" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 4px;">Select a stock to view institutional analytics...</p>
+                        <p id="detail-name" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; max-width: 320px; line-height: 1.3;">Select a stock to view institutional analytics...</p>
                     </div>
-                    <div style="text-align: right;">
-                        <div id="detail-close" style="font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">--</div>
-                        <div id="detail-change" style="font-size: 0.95rem; font-weight: 600; margin-top: 4px;">--</div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="text-align: right;">
+                            <div id="detail-close" style="font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">--</div>
+                            <div id="detail-change" style="font-size: 0.95rem; font-weight: 600; margin-top: 4px;">--</div>
+                        </div>
+                        <button id="close-detail-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); font-size: 1.8rem; line-height: 1; cursor: pointer; padding: 4px 12px; border-radius: 6px; transition: all 0.2s;" title="Close Details Drawer">&times;</button>
                     </div>
                 </div>
 
