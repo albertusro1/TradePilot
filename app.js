@@ -184,50 +184,14 @@ function renderMovers() {
     renderLeaderboard();
 }
 
-function getGrade(score) {
-    if (score >= 80) return 'A';
-    if (score >= 60) return 'B';
-    if (score >= 40) return 'C';
-    if (score >= 20) return 'D';
-    return 'F';
-}
-
-function renderLeaderboard() {
-    if (!globalMarketData) return;
-    
-    // Calculate a composite confirmation score for each stock based on cached market data
-    const scored = globalMarketData.map(s => {
-        let tech = 0;
-        if (s.pct > 0) tech += 15;
-        if (s.vol_10d_pct > 0) tech += 10;
-        if (s.vol_20d_pct > 0) tech += 10;
-        
-        let vol = 0;
-        if (s.vol_10d_pct > 0) vol += 10;
-        if (s.vol_20d_pct > 0) vol += 10;
-        if (s.val >= 5e9) vol += 10;
-        else if (s.val >= 1e9) vol += 5;
-        
-        let inst = 0;
-        if (s.fNet > 0) inst += 20;
-        const ratio = s.vol > 0 ? (s.fNet / s.vol) : 0;
-        if (ratio > 0.15) inst += 15;
-        else if (ratio > 0.05) inst += 10;
-        else if (ratio > 0) inst += 5;
-        
-        const score = tech + vol + inst;
-        return { ...s, score };
-    });
-    
-    // Sort by score descending, filter out inactive / untraded
-    const traded = scored.filter(s => s.vol > 0 && s.prev > 0);
-    const leaders = traded.sort((a, b) => b.score - a.score).slice(0, 30);
+async function renderLeaderboard() {
+    const data = await fetchAPI('/market/leaderboard');
+    if (!data || !data.results || data.results.length === 0) return;
     
     const container = document.getElementById('leaderboard-list');
     if (!container) return;
     
-    container.innerHTML = leaders.map(s => {
-        const grade = getGrade(s.score);
+    container.innerHTML = data.results.map(s => {
         let badgeColor = s.score >= 80 ? 'var(--neon-green)' : (s.score >= 40 ? '#f59e0b' : 'var(--neon-red)');
         
         return `
@@ -236,7 +200,7 @@ function renderLeaderboard() {
                 <div class="m-code">${s.kode_saham}</div>
                 <div class="m-price" style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">Score: ${s.score}</div>
             </div>
-            <div class="m-change" style="color:${badgeColor}; font-weight:700; font-size:1.15rem; font-family:'Outfit',sans-serif;">${grade}</div>
+            <div class="m-change" style="color:${badgeColor}; font-weight:700; font-size:1.15rem; font-family:'Outfit',sans-serif;">${s.grade}</div>
         </div>
         `;
     }).join('');
