@@ -318,6 +318,61 @@ filterBar.addEventListener('click', (e) => {
     applyFilters();
 });
 
+// ── Live Recommendations Section ─────────────────────────────
+async function generateTradeRecommendations() {
+    const elWhale = document.getElementById('signal-whale');
+    const elForeign = document.getElementById('signal-foreign');
+    const elTech = document.getElementById('signal-tech');
+    if (!elWhale) return;
+
+    const data = await fetchAPI('/recommendations/history');
+    const recs = (data && data.results) ? data.results : [];
+
+    const byType = {};
+
+    // Group by signal type, prioritize the first active one we see
+    recs.forEach(r => {
+        if (!byType[r.signal_type]) {
+            byType[r.signal_type] = r;
+        } else if (!byType[r.signal_type].is_active && r.is_active) {
+            byType[r.signal_type] = r;
+        }
+    });
+
+    const renderCard = (el, r, fallbackMsg) => {
+        if (!r) {
+            el.innerHTML = `<div class="txt-muted" style="font-size: 0.8rem; height: 100%; display: flex; align-items: center;">${fallbackMsg}</div>`;
+            return;
+        }
+        
+        const pnl = parseFloat(r.pct_change) || 0;
+        const pnlColor = pnl > 0 ? 'var(--neon-green)' : pnl < 0 ? '#ef4444' : 'var(--text-muted)';
+        const badgeColor = r.is_active ? 'rgba(56, 189, 248, 0.2)' : '#ef444422';
+        const badgeText = r.is_active ? `Entry: ${formatNum(r.entry_price)}` : `STOPPED @ ${formatNum(r.current_price)}`;
+        const textColor = r.is_active ? 'var(--neon-blue)' : '#ef4444';
+
+        el.innerHTML = `
+            <div>
+                <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+                    <span class="t-code" style="font-size: 1.1rem; font-family: 'JetBrains Mono', monospace; font-weight: bold;">${r.kode_saham}</span> 
+                    <span class="badge" style="background:${badgeColor}; color:${textColor}; border: 1px solid ${textColor}44;">${badgeText}</span>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
+                    ${r.is_active ? `Current: <span style="color:#a9b7c6">${formatNum(r.current_price)}</span>` : `<span style="color:#ef4444">Exit: ${r.stop_out_date}</span>`} 
+                    &bull; P&L: <span style="color:${pnlColor}; font-family: 'JetBrains Mono', monospace; font-weight: bold;">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</span>
+                </div>
+                <div style="background: rgba(0,0,0,0.3); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem; color: var(--text-muted); margin-top: auto;">
+                    <strong style="color:var(--text-main)">Strategy:</strong> <br>${r.target_zone}
+                </div>
+            </div>
+        `;
+    };
+
+    renderCard(elWhale, byType['Whale Accumulation'], 'No Whale accumulation traits detected today.');
+    renderCard(elForeign, byType['Institutional Flow'], 'Sideways flow. No high-volume foreign buying.');
+    renderCard(elTech, byType['Technical Pulse'], 'No valid volume breakouts detected.');
+}
+
 // ── Init ─────────────────────────────────────────────────────
 async function init() {
     const data = await fetchAPI('/recommendations/history');
@@ -326,6 +381,7 @@ async function init() {
     updateKPIs(allSignals);
     renderTable(allSignals);
     setupSorting();
+    generateTradeRecommendations();
 }
 
 document.addEventListener('DOMContentLoaded', init);

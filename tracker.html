@@ -423,6 +423,48 @@
                 </div>
             </section>
 
+            <!-- Live Trading Signals -->
+            <section class="signals-section glass-card fade-in" style="margin-bottom: 20px; padding: 20px 25px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--neon-blue)" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                            Live Trading Signals <span class="badge" style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.4); color: var(--neon-blue); padding: 2px 6px;">AI PROXY</span>
+                        </h3>
+                        <p class="txt-muted" style="font-size: 0.82rem; margin-top: 5px;">Algorithmically tracking Market Maker (Bandar) signatures via Foreign Flow, 5% Shareholder mutations, and Volume Technicals.</p>
+                    </div>
+                </div>
+                
+                <div class="signals-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                    <!-- Signal 1: Whale Accumulation -->
+                    <div class="glass-card" style="padding: 15px; border-top: 3px solid #8b5cf6;">
+                        <div style="font-size: 0.70rem; text-transform: uppercase; color: #8b5cf6; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px;">Signal 1: Whale Accumulation</div>
+                        <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--text-main);">5% Shareholder Outbreak</h4>
+                        <div id="signal-whale" style="min-height: 80px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="loader inline" style="width: 15px; height: 15px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Signal 2: Foreign Flow Footprint -->
+                    <div class="glass-card" style="padding: 15px; border-top: 3px solid var(--neon-blue);">
+                        <div style="font-size: 0.70rem; text-transform: uppercase; color: var(--neon-blue); font-weight: 700; letter-spacing: 1px; margin-bottom: 5px;">Signal 2: Institutional Flow</div>
+                        <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--text-main);">Foreign Net Buy Convergence</h4>
+                        <div id="signal-foreign" style="min-height: 80px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="loader inline" style="width: 15px; height: 15px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Signal 3: Volume & Value Breakout -->
+                    <div class="glass-card" style="padding: 15px; border-top: 3px solid var(--neon-green);">
+                        <div style="font-size: 0.70rem; text-transform: uppercase; color: var(--neon-green); font-weight: 700; letter-spacing: 1px; margin-bottom: 5px;">Signal 3: Technical Pulse</div>
+                        <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--text-main);">Volume Breakout + Value</h4>
+                        <div id="signal-tech" style="min-height: 80px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="loader inline" style="width: 15px; height: 15px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- KPI Row -->
             <section class="kpi-row fade-in">
                 <div class="kpi-card glass-card">
