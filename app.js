@@ -221,7 +221,7 @@ function renderLeaderboard() {
     
     // Sort by score descending, filter out inactive / untraded
     const traded = scored.filter(s => s.vol > 0 && s.prev > 0);
-    const leaders = traded.sort((a, b) => b.score - a.score).slice(0, 5);
+    const leaders = traded.sort((a, b) => b.score - a.score).slice(0, 30);
     
     const container = document.getElementById('leaderboard-list');
     if (!container) return;
