@@ -657,6 +657,16 @@ tr:hover td {
     white-space: nowrap;
 }
 
+.ai-rec-signal {
+    font-size: 0.58rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
 .ai-rec-prices {
     flex: 1;
     text-align: right;
@@ -671,9 +681,157 @@ tr:hover td {
     text-align: right;
 }
 
+/* Institutional Upgrade Premium Additions */
+td.right, 
+.m-price, 
+.m-change, 
+.ai-rec-pnl, 
+.ai-rec-code, 
+.t-code,
+#detail-close,
+#detail-change,
+#detail-ticker,
+#txt-score-technical,
+#txt-score-volume,
+#txt-score-institutional,
+#flow-net-val,
+#hhi-value {
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* Clickable Table Rows */
+.clickable-row {
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.clickable-row:hover {
+    background: rgba(56, 189, 248, 0.06) !important;
+}
+
+.clickable-row.selected-row {
+    background: rgba(56, 189, 248, 0.12) !important;
+    border-left: 3px solid var(--neon-blue);
+}
+
+/* Detail Nested Tabs */
+.detail-tab-btn {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.detail-tab-btn:hover {
+    color: var(--text-main);
+    background: rgba(255,255,255,0.03);
+}
+
+.detail-tab-btn.active {
+    color: var(--neon-blue);
+    border-bottom-color: var(--neon-blue);
+    background: rgba(56, 189, 248, 0.05);
+}
+
+.detail-tab-pane {
+    display: none;
+    animation: fadeIn 0.4s ease;
+}
+
+.detail-tab-pane.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Confirmation Checklist */
+.checklist-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border-light);
+    font-size: 0.82rem;
+}
+
+.checklist-row.pass {
+    border-left: 3px solid var(--neon-green);
+}
+
+.checklist-row.warn {
+    border-left: 3px solid #f59e0b;
+}
+
+.checklist-row.fail {
+    border-left: 3px solid var(--neon-red);
+}
+
+.checklist-icon {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.checklist-icon.pass { color: var(--neon-green); }
+.checklist-icon.warn { color: #f59e0b; }
+.checklist-icon.fail { color: var(--neon-red); }
+
+/* SVG Gauge Animation */
+.gauge-svg {
+    transform: rotate(-90deg);
+}
+
+.gauge-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.06);
+    stroke-width: 4;
+}
+
+.gauge-fill {
+    fill: none;
+    stroke-width: 4;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s ease-in-out;
+}
+
+.gauge-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    fill: var(--text-main);
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+/* ApexCharts dark styling overrides */
+.apexcharts-tooltip {
+    background: rgba(15, 23, 42, 0.95) !important;
+    border: 1px solid var(--border-light) !important;
+    color: var(--text-main) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+
+.apexcharts-tooltip-title {
+    background: rgba(0,0,0,0.2) !important;
+    border-bottom: 1px solid var(--border-light) !important;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .movers-section {
         grid-template-columns: 1fr;
     }
 }
+
