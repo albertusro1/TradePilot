@@ -3,375 +3,351 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TradePilot • Market Overview</title>
-    <!-- Modern premium font -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>TradePilot • Institutional Grade Dashboard</title>
+    <!-- Premium Web Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="dashboard-wrapper">
-        <header class="glass-header">
-            <div class="logo">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="glow-icon">
+        <!-- Sidebar (Left Column) -->
+        <aside class="sidebar">
+            <div class="brand">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="glow-icon">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
-                <h1>TradePilot <span class="badge">PRO</span></h1>
+                <h1>TradePilot <span style="font-size: 0.65rem; color: var(--neon-blue); font-weight: 800; border: 1.5px solid var(--neon-blue); padding: 1px 4px; border-radius: 4px; margin-left: 2px;">PRO</span></h1>
             </div>
-            <div class="controls">
-                <nav class="nav-group">
-                    <a href="index.html" class="nav-link active">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                        Dashboard
-                    </a>
-                    <a href="tracker.html" class="nav-link">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                        AI Tracker
-                    </a>
-                    <a href="news.html" class="nav-link">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1m2 13a2 2 0 0 1-2-2V7m2 13a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2m-4-3H9M7 8h10M7 12h10M7 16h10"/></svg>
-                        News
-                    </a>
-                    <a href="admin.html" class="nav-link">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                        Admin
-                    </a>
+
+            <!-- Sync Status and Control -->
+            <div class="sync-badge">
+                <div class="sync-row">
+                    <span id="trading-date" style="font-weight: 600; color: var(--text-main);">Date: --</span>
+                    <button id="refresh-btn" class="sync-btn">Sync</button>
+                </div>
+                <span id="last-updated" style="font-size: 0.72rem;">Awaiting sync...</span>
+            </div>
+
+            <!-- Leaderboard Card (Primary Focus) -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h2>Leaderboard</h2>
+                    <span style="font-size: 0.62rem; color: var(--neon-green); font-weight: 700; background: var(--neon-green-glow); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--neon-green);">TOP RATED</span>
+                </div>
+                <div class="sidebar-list" id="leaderboard-list">
+                    <div class="loader"></div>
+                </div>
+            </div>
+
+            <!-- Movers Accordion Widgets -->
+            <div class="movers-accordion">
+                <div class="accordion-tab">
+                    <button class="accordion-header" id="accordion-btn-gainers">
+                        <span>Top Gainers</span>
+                        <span style="color: var(--neon-green); font-size: 1.1rem; line-height: 1;">↗</span>
+                    </button>
+                    <div class="accordion-content" id="accordion-content-gainers">
+                        <div class="sidebar-list" id="gainers-list">
+                            <div class="loader inline"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="accordion-tab">
+                    <button class="accordion-header" id="accordion-btn-losers">
+                        <span>Top Losers</span>
+                        <span style="color: var(--neon-red); font-size: 1.1rem; line-height: 1;">↘</span>
+                    </button>
+                    <div class="accordion-content" id="accordion-content-losers">
+                        <div class="sidebar-list" id="losers-list">
+                            <div class="loader inline"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subtle Settings Gear Icon linking to Admin Scraper page -->
+            <a href="admin.html" target="_blank" class="settings-cog" title="IDX Scraper Gateway Orchestrator">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </a>
+        </aside>
+
+        <!-- Main Work Area (Right Column) -->
+        <main class="main-content">
+            <!-- Toolbar Section -->
+            <section class="toolbar-section">
+                <div class="search-box">
+                    <input type="text" id="search-main" class="search-input" placeholder="Search emiten code or name..." autocomplete="off">
+                </div>
+                <select id="sector-filter" class="filter-dropdown">
+                    <option value="">All Sectors</option>
+                </select>
+            </section>
+
+            <!-- Main Tabular Data (Glass Card) -->
+            <section class="glass-card">
+                <nav class="tabs-nav">
+                    <button class="tab-btn active" data-target="tab-summary">Market Overview</button>
+                    <button class="tab-btn" data-target="tab-screener">Fundamental Screener</button>
+                    <button class="tab-btn" data-target="tab-shareholders">5% Shareholders</button>
                 </nav>
 
-                <div class="meta-group">
-                    <div id="trading-date" class="market-date-badge" title="Market Data Trading Date">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        Date: --
-                    </div>
-                    <span id="last-updated">Updating data...</span>
-                    <button id="refresh-btn" class="glow-btn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"></polyline>
-                            <polyline points="1 20 1 14 7 14"></polyline>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                        </svg>
-                        <span id="sync-text">Sync</span>
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <main>
-
-
-            <!-- Global Market Stats -->
-            <section class="glass-card fade-in" style="margin-bottom: 20px; padding: 15px 25px; display: flex; justify-content: space-around; align-items: center; border-left: 3px solid var(--neon-blue);">
-                <div class="mini-stat" style="text-align: center;"><span class="mini-label" style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Total Value</span><span class="mini-value txt-blue" id="stat-value" style="font-size: 1.4rem; font-weight: 700;">--</span></div>
-                <div class="mini-stat" style="text-align: center;"><span class="mini-label" style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Total Volume</span><span class="mini-value" id="stat-volume" style="font-size: 1.4rem; font-weight: 700; color: var(--text-main);">--</span></div>
-                <div class="mini-stat" style="text-align: center;"><span class="mini-label" style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px;">Foreign Net</span><span class="mini-value" id="stat-foreign" style="font-size: 1.4rem; font-weight: 700;">--</span></div>
-            </section>
-
-            <!-- Top Movers Row -->
-            <section class="movers-section fade-in">
-                <div class="card glass-card top-gainers">
-                    <div class="card-header">
-                        <h2>Top Gainers</h2>
-                        <span class="icon green-icon">↗</span>
-                    </div>
-                    <div class="movers-list" id="gainers-list">
-                        <div class="loader"></div>
-                    </div>
-                </div>
-                
-                <div class="card glass-card top-losers">
-                    <div class="card-header">
-                        <h2>Top Losers</h2>
-                        <span class="icon red-icon">↘</span>
-                    </div>
-                    <div class="movers-list" id="losers-list">
-                        <div class="loader"></div>
-                    </div>
-                </div>
-
-                <div class="card glass-card top-rated">
-                    <div class="card-header">
-                        <h2>Leaderboard</h2>
-                        <span class="badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); color: var(--neon-green); font-size: 0.6rem;">TOP RATED</span>
-                    </div>
-                    <div class="movers-list" id="leaderboard-list" style="max-height: 230px; overflow-y: auto; padding-right: 8px;">
-                        <div class="loader"></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Main Tabular Data -->
-            <section class="data-section glass-card slide-up">
-                <div class="tabs">
-                    <button class="tab-btn active" data-target="tab-summary">Market Summary</button>
-                    <button class="tab-btn" data-target="tab-screener">Fundamental Data</button>
-                    <button class="tab-btn" data-target="tab-shareholders">5% Shareholders</button>
-
-                </div>
-
                 <div class="tab-content">
-                    <!-- Market Summary -->
+                    <!-- Market Overview Table -->
                     <div id="tab-summary" class="tab-pane active">
-                        <div class="table-actions" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                            <h3>Market Overview</h3>
-                            <input type="text" id="search-summary" class="search-input" placeholder="Search Code in Summary..." autocomplete="off">
-                        </div>
                         <div class="table-container">
-                            <table class="sortable" id="table-summary">
+                            <table id="table-summary">
                                 <thead>
                                     <tr>
-                                        <th data-type="string">Code ↕</th>
-                                        <th data-type="string">Name ↕</th>
-                                        <th class="right" data-type="number">Open ↕</th>
-                                        <th class="right" data-type="number">High ↕</th>
-                                        <th class="right" data-type="number">Low ↕</th>
-                                        <th class="right" data-type="number">Close ↕</th>
-                                        <th class="right" data-type="number">Change ↕</th>
-                                        <th class="right" data-type="number">Volume ↕</th>
-                                        <th class="right" data-type="number">10D ↕</th>
-                                        <th class="right" data-type="number">20D ↕</th>
-                                        <th class="right" data-type="number">3M ↕</th>
-                                        <th class="right" data-type="number">Value (IDR) ↕</th>
-                                        <th class="right" data-type="number">Freq ↕</th>
-                                        <th class="right" data-type="number">Frgn Net ↕</th>
+                                        <th style="width: 90px;">Code</th>
+                                        <th>Company Name</th>
+                                        <th class="right">Close</th>
+                                        <th class="right">Change</th>
+                                        <th class="right">Volume</th>
+                                        <th class="right">10D</th>
+                                        <th class="right">20D</th>
+                                        <th class="right">3M</th>
+                                        <th class="right">Value (IDR)</th>
+                                        <th class="right">Freq</th>
+                                        <th class="right">Foreign Net</th>
+                                        <th class="center" style="width: 100px;">Grade</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="14" class="center"><div class="loader inline"></div></td></tr>
+                                    <tr><td colspan="12" class="center"><div class="loader inline"></div></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                    
-                    <!-- Screener -->
+
+                    <!-- Fundamental Screener Table -->
                     <div id="tab-screener" class="tab-pane">
-                         <div class="table-actions" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end;">
-                            <div>
-                                <h3>Fundamental Analytics</h3>
-                                <div style="display: flex; gap: 15px; margin-top: 10px;">
-                                    <div class="multi-select" id="ms-sector" data-name="Sector">
-                                       <div class="ms-header">All Sectors ▾</div>
-                                       <div class="ms-dropdown" style="display:none;"></div>
-                                    </div>
-                                    <div class="multi-select" id="ms-industry" data-name="Industry">
-                                       <div class="ms-header">All Industries ▾</div>
-                                       <div class="ms-dropdown" style="display:none;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <input type="text" id="search-screener" class="search-input" placeholder="Search Code in Fundamentals..." autocomplete="off">
-                        </div>
-                         <div class="table-container">
-                            <table class="sortable" id="table-screener">
+                        <div class="table-container">
+                            <table id="table-screener">
                                 <thead>
                                     <tr>
-                                        <th data-type="string">Code ↕</th>
-                                        <th data-type="string">Name ↕</th>
-                                        <th data-type="string">Sector ↕</th>
-                                        <th data-type="string">Industry ↕</th>
-                                        <th class="right" data-type="number">P/E ↕</th>
-                                        <th class="right" data-type="number">PBV ↕</th>
-                                        <th class="right" data-type="number">ROE (%) ↕</th>
-                                        <th class="right" data-type="number">ROA (%) ↕</th>
-                                        <th class="right" data-type="number">NPM (%) ↕</th>
-                                        <th class="right" data-type="number">DER ↕</th>
-                                        <th class="right" data-type="number">Mkt Cap ↕</th>
+                                        <th style="width: 90px;">Code</th>
+                                        <th>Company Name</th>
+                                        <th>Sector</th>
+                                        <th>Industry</th>
+                                        <th class="right">P/E</th>
+                                        <th class="right">PBV</th>
+                                        <th class="right">ROE (%)</th>
+                                        <th class="right">ROA (%)</th>
+                                        <th class="right">NPM (%)</th>
+                                        <th class="right">DER</th>
+                                        <th class="right">Market Cap</th>
                                     </tr>
                                 </thead>
-                                <tbody></tbody>
+                                <tbody>
+                                    <tr><td colspan="11" class="center"><div class="loader inline"></div></td></tr>
+                                </tbody>
                             </table>
                         </div>
                     </div>
-                    
-                    <!-- Shareholders -->
+
+                    <!-- 5% Shareholders Table -->
                     <div id="tab-shareholders" class="tab-pane">
-                         <div class="table-container">
-                            <table class="sortable" id="table-shareholders">
+                        <div class="table-container">
+                            <table id="table-shareholders">
                                 <thead>
                                     <tr>
-                                        <th data-type="string">Date ↕</th>
-                                        <th data-type="string">Code ↕</th>
-                                        <th data-type="string">Shareholder ↕</th>
-                                        <th data-type="string">Type ↕</th>
-                                        <th class="right" data-type="number">Shares ↕</th>
-                                        <th class="right" data-type="number">Pct (%) ↕</th>
-                                        <th class="right" data-type="number">Change ↕</th>
+                                        <th style="width: 100px;">Report Date</th>
+                                        <th style="width: 80px;">Code</th>
+                                        <th>Major Shareholder</th>
+                                        <th>Investor Type</th>
+                                        <th class="right">Shares Held</th>
+                                        <th class="right">PCT</th>
+                                        <th class="right">Change (pp Shift)</th>
                                     </tr>
                                 </thead>
-                                <tbody></tbody>
+                                <tbody>
+                                    <tr><td colspan="7" class="center"><div class="loader inline"></div></td></tr>
+                                </tbody>
                             </table>
-                        </div>
-                    </div>
-
-
-                </div>
-            </section>
-
-            <!-- Stock Detail Hub (Side Drawer) -->
-            <section id="stock-detail-panel" class="glass-card">
-                <!-- Panel Header -->
-                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-light); padding-bottom: 1rem; margin-bottom: 1.5rem;">
-                    <div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <h2 id="detail-ticker" style="font-size: 2rem; font-weight: 700; color: var(--neon-blue); font-family: 'JetBrains Mono', monospace;">--</h2>
-                            <span id="detail-grade" class="badge" style="font-size: 1rem; padding: 4px 10px; background: rgba(56, 189, 248, 0.1); color: var(--neon-blue); border: 1px solid var(--neon-blue);">Grade: --</span>
-                        </div>
-                        <p id="detail-name" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; max-width: 320px; line-height: 1.3;">Select a stock to view institutional analytics...</p>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <div style="text-align: right;">
-                            <div id="detail-close" style="font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">--</div>
-                            <div id="detail-change" style="font-size: 0.95rem; font-weight: 600; margin-top: 4px;">--</div>
-                        </div>
-                        <button id="close-detail-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); font-size: 1.8rem; line-height: 1; cursor: pointer; padding: 4px 12px; border-radius: 6px; transition: all 0.2s;" title="Close Details Drawer">&times;</button>
-                    </div>
-                </div>
-
-                <!-- Sub-score Summaries -->
-                <div class="sub-scores-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                    <div class="score-card" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-light); border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 15px;">
-                        <div style="width: 50px; height: 50px; position: relative;" id="gauge-technical-container">
-                            <!-- Circular SVG Gauge -->
-                        </div>
-                        <div>
-                            <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Technical Score</h4>
-                            <p style="font-size: 1.1rem; font-weight: 700;" id="txt-score-technical">-- / 35</p>
-                        </div>
-                    </div>
-                    <div class="score-card" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-light); border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 15px;">
-                        <div style="width: 50px; height: 50px; position: relative;" id="gauge-volume-container"></div>
-                        <div>
-                            <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Volume Score</h4>
-                            <p style="font-size: 1.1rem; font-weight: 700;" id="txt-score-volume">-- / 30</p>
-                        </div>
-                    </div>
-                    <div class="score-card" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-light); border-radius: 10px; padding: 12px; display: flex; align-items: center; gap: 15px;">
-                        <div style="width: 50px; height: 50px; position: relative;" id="gauge-institutional-container"></div>
-                        <div>
-                            <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Institutional Score</h4>
-                            <p style="font-size: 1.1rem; font-weight: 700;" id="txt-score-institutional">-- / 35</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Deep-Dive Nested Tabs -->
-                <div class="detail-tabs" style="display: flex; gap: 10px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; margin-bottom: 1.5rem;">
-                    <button class="detail-tab-btn active" data-target="detail-confirmation">Confirmation Checklist</button>
-                    <button class="detail-tab-btn" data-target="detail-valuation">Valuation Bands (PE/PBV)</button>
-                    <button class="detail-tab-btn" data-target="detail-flow">Net Flow Heatmaps</button>
-                    <button class="detail-tab-btn" data-target="detail-ownership">Regulatory Ownership</button>
-                </div>
-
-                <div class="detail-tab-content">
-                    <!-- Confirmation Checklist -->
-                    <div id="detail-confirmation" class="detail-tab-pane active">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
-                            <div>
-                                <h3 style="font-size: 1.1rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    Automated Confirmation Checklist
-                                </h3>
-                                <div id="confirmation-checklist-container" style="display: flex; flex-direction: column; gap: 8px;">
-                                    <!-- Dynamic Checklist Rows -->
-                                </div>
-                            </div>
-                            <div style="background: rgba(0,0,0,0.15); border-radius: 8px; padding: 15px; border: 1px solid var(--border-light);">
-                                <h3 style="font-size: 1rem; margin-bottom: 10px; color: var(--text-main);">Score Methodology</h3>
-                                <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
-                                    The Confirmation Matrix evaluates three market pillars to grade signal strength:
-                                    <br><br>
-                                    <strong>1. Technical (35%):</strong> Confirms price action trend relative to SMA20 and P/E historical band discount.
-                                    <br>
-                                    <strong>2. Volume (30%):</strong> Assesses volume expansion relative to 10D and 20D averages and checks for institutional-grade liquidity (>1B IDR).
-                                    <br>
-                                    <strong>3. Institutional (35%):</strong> Evaluates foreign flow buy/sell, major holder (>5%) accumulation changes, and active AI engine strategy matches.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Valuation Bands -->
-                    <div id="detail-valuation" class="detail-tab-pane">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 1.5rem;">
-                            <div>
-                                <h3 style="font-size: 1.1rem; margin-bottom: 15px; display: flex; align-items: center; gap: 6px;">
-                                    P/E Standard Deviation Bands
-                                </h3>
-                                <div id="pe-bands-chart" style="min-height: 250px;"></div>
-                            </div>
-                            <div>
-                                <h3 style="font-size: 1.1rem; margin-bottom: 15px; display: flex; align-items: center; gap: 6px;">
-                                    PBV Standard Deviation Bands
-                                </h3>
-                                <div id="pbv-bands-chart" style="min-height: 250px;"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Net Flow Heatmaps -->
-                    <div id="detail-flow" class="detail-tab-pane">
-                        <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
-                            <div style="display: flex; flex-direction: column; gap: 1rem;">
-                                <h3>Foreign Transaction Net Volume Heat-Bar</h3>
-                                <div style="background: rgba(0,0,0,0.15); border-radius: 8px; padding: 15px; border: 1px solid var(--border-light);">
-                                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px;">
-                                        <span style="color: var(--neon-green); font-weight: 600;">Foreign Buy</span>
-                                        <span style="color: var(--neon-red); font-weight: 600;">Foreign Sell</span>
-                                    </div>
-                                    <div id="flow-net-heatbar" style="height: 24px; border-radius: 4px; display: flex; overflow: hidden; background: rgba(255,255,255,0.05); margin-bottom: 12px;">
-                                        <!-- Stacked buy/sell colored segments -->
-                                    </div>
-                                    <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-muted);">
-                                        <span id="flow-buy-val">Buy: 0</span>
-                                        <span id="flow-sell-val">Sell: 0</span>
-                                    </div>
-                                    <div style="border-top: 1px solid var(--border-light); margin-top: 12px; padding-top: 12px; text-align: center;">
-                                        <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Foreign Net Flow</div>
-                                        <div id="flow-net-val" style="font-size: 1.5rem; font-weight: 700; margin-top: 4px; font-family: 'JetBrains Mono', monospace;">0</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <h3>5-Day Volume & Price Timeline</h3>
-                                <div id="flow-timeline-chart" style="min-height: 200px;"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Regulatory Ownership -->
-                    <div id="detail-ownership" class="detail-tab-pane">
-                        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem;">
-                            <div style="display: flex; flex-direction: column; gap: 1rem;">
-                                <h3>OJK Free Float Monitor</h3>
-                                <div style="background: rgba(0,0,0,0.15); border-radius: 8px; padding: 15px; border: 1px solid var(--border-light); display: flex; flex-direction: column; align-items: center; text-align: center;">
-                                    <div id="free-float-gauge" style="width: 140px; height: 140px; position: relative; margin-bottom: 10px;"></div>
-                                    <p id="free-float-status" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);"></p>
-                                    <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.3;">
-                                        OJK requires a minimum free float of 15% for listed companies on the IDX.
-                                    </p>
-                                </div>
-
-                                <h3>Ownership Concentration (HHI)</h3>
-                                <div style="background: rgba(0,0,0,0.15); border-radius: 8px; padding: 15px; border: 1px solid var(--border-light);">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                        <span style="font-size: 0.85rem; color: var(--text-muted);">Concentration Index:</span>
-                                        <span id="hhi-value" style="font-size: 1.2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">0</span>
-                                    </div>
-                                    <div style="height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,0.05); display: flex;" id="hhi-bar">
-                                        <!-- HHI segments -->
-                                    </div>
-                                    <p id="hhi-status" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px; line-height: 1.3;"></p>
-                                </div>
-                            </div>
-                            <div>
-                                <h3>Major Shareholders Entity Timeline (>5%)</h3>
-                                <div id="ownership-timeline-chart" style="min-height: 280px;"></div>
-                            </div>
                         </div>
                     </div>
                 </div>
             </section>
         </main>
+
+        <!-- Slide-out Side Drawer (Detailed Analytics Hub) -->
+        <section id="stock-detail-panel">
+            <!-- Drawer Header -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-light); padding-bottom: 1.25rem; margin-bottom: 1.25rem;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <h2 id="detail-ticker" style="font-size: 2.2rem; font-weight: 800; color: var(--neon-blue); font-family: var(--font-mono); letter-spacing: 0.5px;">--</h2>
+                        <span id="detail-grade" class="badge-grade" style="font-size: 1.1rem; padding: 4px 12px;">--</span>
+                    </div>
+                    <p id="detail-name" style="color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; line-height: 1.3;">Select an emiten to view deep-dive analytics...</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <div style="text-align: right;">
+                        <div id="detail-close" style="font-size: 1.8rem; font-weight: 700; font-family: var(--font-mono);">--</div>
+                        <div id="detail-change" style="font-size: 0.95rem; font-weight: 600; margin-top: 4px;">--</div>
+                    </div>
+                    <button id="close-detail-btn" style="background: rgba(255,255,255,0.04); border: 1px solid var(--border-light); color: var(--text-muted); font-size: 2rem; line-height: 0.8; cursor: pointer; padding: 6px 14px; border-radius: 8px; transition: all 0.2s;" title="Close Details Drawer">&times;</button>
+                </div>
+            </div>
+
+            <!-- Price & Volume History Chart Module (Visual Trend Confirmation) -->
+            <div style="margin-bottom: 2rem;">
+                <h3 style="font-family: var(--font-headings); font-size: 1.15rem; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: var(--text-main);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                    Price & Volume Trend Analysis (Last 30 Sessions)
+                </h3>
+
+                <!-- 5-Day Trend Analyzer Card -->
+                <div class="trend-analyzer-card" id="detail-trend-card">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span class="trend-badge neutral" id="trend-status-badge">Analyzing Trend...</span>
+                    </div>
+                    <p id="trend-synthesis-text" style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.45;"></p>
+                </div>
+
+                <!-- ApexCharts Dual-Axis Container -->
+                <div id="price-history-chart" style="min-height: 250px; background: rgba(0,0,0,0.1); border-radius: 8px; padding: 10px; border: 1px solid var(--border-light);"></div>
+            </div>
+
+            <!-- Detail Sub-scores (Technical, Volume, Institutional) -->
+            <div class="sub-scores-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                <div class="mover-item" style="padding: 12px; gap: 12px;">
+                    <div style="width: 44px; height: 44px;" id="gauge-technical-container"></div>
+                    <div>
+                        <h4 style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Technical</h4>
+                        <p style="font-size: 1.05rem; font-weight: 700; font-family: var(--font-mono);" id="txt-score-technical">-- / 35</p>
+                    </div>
+                </div>
+                <div class="mover-item" style="padding: 12px; gap: 12px;">
+                    <div style="width: 44px; height: 44px;" id="gauge-volume-container"></div>
+                    <div>
+                        <h4 style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Volume</h4>
+                        <p style="font-size: 1.05rem; font-weight: 700; font-family: var(--font-mono);" id="txt-score-volume">-- / 30</p>
+                    </div>
+                </div>
+                <div class="mover-item" style="padding: 12px; gap: 12px;">
+                    <div style="width: 44px; height: 44px;" id="gauge-institutional-container"></div>
+                    <div>
+                        <h4 style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Institutional</h4>
+                        <p style="font-size: 1.05rem; font-weight: 700; font-family: var(--font-mono);" id="txt-score-institutional">-- / 35</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail Tabs (Bottom deep dive) -->
+            <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; margin-bottom: 1.5rem;">
+                <button class="detail-tab-btn active" data-target="detail-confirmation">Checklist</button>
+                <button class="detail-tab-btn" data-target="detail-valuation">Valuation Bands</button>
+                <button class="detail-tab-btn" data-target="detail-flow">Net Flow Heatbars</button>
+                <button class="detail-tab-btn" data-target="detail-ownership">Shareholders & Float</button>
+            </div>
+
+            <div class="detail-tab-content">
+                <!-- Checklist Pane -->
+                <div id="detail-confirmation" class="detail-tab-pane active">
+                    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem;">
+                        <div>
+                            <h4 style="font-size: 0.9rem; margin-bottom: 12px;">Confirmation Checklist</h4>
+                            <div id="confirmation-checklist-container" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Dynamic check items -->
+                            </div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-light); border-radius: 8px; padding: 16px;">
+                            <h4 style="font-size: 0.85rem; margin-bottom: 8px; color: var(--text-main);">Grading Methodology</h4>
+                            <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+                                Ratings represent institutional matrix checks:
+                                <br><br>
+                                <strong>Technical (35%):</strong> Compares price with 20D Simple Moving Average (SMA20) and PER valuation margins.
+                                <br><br>
+                                <strong>Volume (30%):</strong> Compares session volume with 10D/20D averages and checks liquidity sizing (>1B IDR).
+                                <br><br>
+                                <strong>Institutional (35%):</strong> Evaluates major 5% shareholder shifts, foreign transaction flows, and active AI models.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Valuation Bands Pane -->
+                <div id="detail-valuation" class="detail-tab-pane">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.5rem;">
+                        <div>
+                            <h4 style="font-size: 0.9rem; margin-bottom: 12px;">P/E standard deviation bands</h4>
+                            <div id="pe-bands-chart" style="min-height: 230px;"></div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.9rem; margin-bottom: 12px;">PBV standard deviation bands</h4>
+                            <div id="pbv-bands-chart" style="min-height: 230px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Net Flow Heatmaps Pane -->
+                <div id="detail-flow" class="detail-tab-pane">
+                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
+                        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                            <div>
+                                <h4 style="font-size: 0.9rem; margin-bottom: 10px;">Foreign transaction volume distribution</h4>
+                                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-light); border-radius: 8px; padding: 15px;">
+                                    <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 6px;">
+                                        <span class="txt-green" style="font-weight: 600;">Foreign Buy</span>
+                                        <span class="txt-red" style="font-weight: 600;">Foreign Sell</span>
+                                    </div>
+                                    <div id="flow-net-heatbar" style="height: 20px; border-radius: 4px; display: flex; overflow: hidden; background: rgba(255,255,255,0.05); margin-bottom: 12px;"></div>
+                                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono);">
+                                        <span id="flow-buy-val">Buy: 0</span>
+                                        <span id="flow-sell-val">Sell: 0</span>
+                                    </div>
+                                    <div style="border-top: 1px solid var(--border-light); margin-top: 12px; padding-top: 12px; text-align: center;">
+                                        <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;">Foreign Net Flow</div>
+                                        <div id="flow-net-val" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px; font-family: var(--font-mono);">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.9rem; margin-bottom: 10px;">5-Day flow & price history</h4>
+                            <div id="flow-timeline-chart" style="min-height: 200px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ownership & Float Pane -->
+                <div id="detail-ownership" class="detail-tab-pane">
+                    <div style="display: grid; grid-template-columns: 1fr 1.8fr; gap: 1.5rem;">
+                        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                            <div>
+                                <h4 style="font-size: 0.9rem; margin-bottom: 8px;">OJK free float monitor</h4>
+                                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-light); border-radius: 8px; padding: 15px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                                    <div id="free-float-gauge" style="width: 120px; height: 120px; position: relative; margin-bottom: 10px;"></div>
+                                    <p id="free-float-status" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);"></p>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Ownership Concentration (HHI)</h4>
+                                <div style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-light); border-radius: 8px; padding: 15px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-size: 0.8rem; color: var(--text-muted);">Concentration HHI:</span>
+                                        <span id="hhi-value" style="font-size: 1.1rem; font-weight: 700; font-family: var(--font-mono);">0</span>
+                                    </div>
+                                    <div style="height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,0.05); display: flex;" id="hhi-bar"></div>
+                                    <p id="hhi-status" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px; line-height: 1.3;"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Major Shareholders Entity Timeline (>5%)</h4>
+                            <div id="ownership-timeline-chart" style="min-height: 260px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
 
+    <!-- Charting libraries and orchestration scripts -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script type="module" src="app.js"></script>
 </body>

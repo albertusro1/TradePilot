@@ -1,61 +1,77 @@
-// Configuration
+// --------------------------------------------------------------------------
+// TradePilot Core Client Application
+// --------------------------------------------------------------------------
+
 const API_BASE = 'http://localhost:8080/api/v1';
 const API_KEY = 'dev_secret_key';
 
-// DOM Elements
-const refreshBtn = document.getElementById('refresh-btn');
-const syncText = document.getElementById('sync-text');
-const lastUpdated = document.getElementById('last-updated');
-const searchSummary = document.getElementById('search-summary');
-const searchScreener = document.getElementById('search-screener');
-const tabs = document.querySelectorAll('.tab-btn');
-const tabPanes = document.querySelectorAll('.tab-pane');
+// Global App State
+let globalMarketData = null;
+let globalScreenerData = null;
+let globalShareholderData = null;
+let globalLeaderboardData = null;
 
-// State tracking
-let globalMarketData = null; // Cache to avoid refetching /market/summary
-let globalScreenerData = null; // Cache to avoid refetching /market/screener
-let globalShareholdersData = null; // Cache for AI Engine
-let selectedSectors = [];
-let selectedIndustries = [];
-const loadedTabs = {
-    'tab-summary': false,
-    'tab-screener': false,
-    'tab-shareholders': false
-};
+let activeTicker = null;
+let activeTab = 'tab-summary';
+let sectorList = [];
 
-// Utilities for Indonesian number format ("1.500" -> 1500)
-const parseIndoNum = (str, returnNull = false) => {
-    if (!str || str.trim() === '-' || str.trim() === '') return returnNull ? null : 0;
-    // Remove all dots, convert commas to dots
-    let val = str.replace(/\./g, '').replace(/,/g, '.');
-    // Remove newlines and tabs from IDX bad data (e.g. "=\n\t\t\t\t0")
-    val = val.replace(/[\n\t= ]/g, '');
-    let num = parseFloat(val);
-    return isNaN(num) ? (returnNull ? null : 0) : num;
-};
+// ApexCharts references
+let chartPriceVolume = null;
+let chartPEBands = null;
+let chartPBVBands = null;
+let chartFlowTimeline = null;
+let chartOwnershipTimeline = null;
 
-// English number format ("3,200,142,830" -> 3200142830, "41.10" -> 41.1)
-const parseEngNum = (str) => {
+// Helper: Parse Indonesian locale numbers safely
+function parseIndoNum(str) {
     if (!str) return 0;
-    let val = str.replace(/,/g, ''); // Remove thousand-separator commas
-    val = val.replace(/[\n\t= ]/g, '');
-    let num = parseFloat(val);
-    return isNaN(num) ? 0 : num;
-};
+    let clean = str.toString().replace(/\./g, '').replace(/,/g, '.');
+    return parseFloat(clean) || 0;
+}
 
-const formatNum = (num) => new Intl.NumberFormat('en-US').format(num);
-const formatMoney = (num) => {
-    if (num >= 1e12) return (num / 1e12).toFixed(2) + ' T';
-    if (num >= 1e9) return (num / 1e9).toFixed(2) + ' B';
-    if (num >= 1e6) return (num / 1e6).toFixed(2) + ' M';
-    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
-};
-const formatPct = (num) => {
-    let sign = num > 0 ? '+' : '';
-    return `${sign}${num.toFixed(2)}%`;
-};
+// Helper: Format Money
+function formatMoney(num) {
+    if (num === null || isNaN(num)) return '-';
+    if (Math.abs(num) >= 1e12) return (num / 1e12).toFixed(2) + ' T';
+    if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(2) + ' B';
+    if (Math.abs(num) >= 1e6) return (num / 1e6).toFixed(2) + ' M';
+    return formatNum(num);
+}
 
-// Main fetch wrapper
+// Helper: Format Numbers
+function formatNum(num) {
+    if (num === null || isNaN(num)) return '-';
+    return num.toLocaleString('id-ID');
+}
+
+// Helper: Format Percentage
+function formatPct(num) {
+    if (num === null || isNaN(num)) return '-';
+    return (num > 0 ? '+' : '') + num.toFixed(2) + '%';
+}
+
+// Helper: Classify Investor Type (Client side classifying for KSEI shareholders)
+function inferInvestorType(name, status) {
+    const n = name.toUpperCase();
+    let type = 'Lain-lain';
+    
+    if (n.includes('REKSA DANA') || n.includes('MUTUAL FUND') || n.includes('ASSET MANAGEMENT')) {
+        type = 'Mutual Fund';
+    } else if (n.includes('KUSTODIAN') || n.includes('CUSTODIAN') || n.includes('TRUSTEE') || n.includes('BANK CUST')) {
+        type = 'Custodian/Trustee';
+    } else if (n.includes('ASURANSI') || n.includes('INSURANCE') || n.includes('PENSION') || n.includes('DAPEN')) {
+        type = 'Insurance/Pension';
+    } else if (n.includes('PT ') || n.includes(' CORP') || n.includes(' HOLDINGS') || n.includes(' LIMITED') || n.includes(' LTD')) {
+        type = 'Corporate Entity';
+    } else if (n.includes('PEMERINTAH') || n.includes('REPUBLIK') || n.includes('GOVERNMENT')) {
+        type = 'Government';
+    }
+    
+    const nat = status === 'A' ? 'Asing' : 'Lokal';
+    return `${type} (${nat})`;
+}
+
+// Fetch API Helper
 async function fetchAPI(endpoint) {
     try {
         const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -69,20 +85,38 @@ async function fetchAPI(endpoint) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// DATA FETCHING & MOVERS
-// ─────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
+// Core Initialization & Loading
+// --------------------------------------------------------------------------
+async function startSync() {
+    const refreshBtn = document.getElementById('refresh-btn');
+    const syncText = document.getElementById('last-updated');
+    
+    refreshBtn.classList.add('syncing');
+    syncText.textContent = 'Synchronizing...';
+    
+    // Concurrently fetch summary data matrices
+    const [summary, screener, shareholders, leaderboard] = await Promise.all([
+        fetchAPI('/market/summary'),
+        fetchAPI('/market/screener'),
+        fetchAPI('/market/shareholders?page=1&per_page=2000'),
+        fetchAPI('/market/leaderboard')
+    ]);
+    
+    refreshBtn.classList.remove('syncing');
+    
+    if (!summary || !summary.results || summary.results.length === 0) {
+        syncText.textContent = 'Sync Failed!';
+        return;
+    }
 
-async function loadMarketSummary() {
-    const data = await fetchAPI('/market/summary');
-    if (!data || !data.results || data.results.length === 0) return false;
-    
-    // Set Trading Date Badge
-    const tDate = data.results[0].tanggal_perdagangan_terakhir || '--';
+    // Set date header badge
+    const tDate = summary.results[0].tanggal_perdagangan_terakhir || '--';
     document.getElementById('trading-date').textContent = `Date: ${tDate}`;
-    
-    // Process raw strings into clean numbers for sorting and math
-    globalMarketData = data.results.map(s => {
+    syncText.textContent = `Synced: ${new Date().toLocaleTimeString()}`;
+
+    // Clean and cache Market Overview
+    globalMarketData = summary.results.map(s => {
         let open = parseIndoNum(s.open_price);
         let high = parseIndoNum(s.tertinggi);
         let low = parseIndoNum(s.terendah);
@@ -109,772 +143,577 @@ async function loadMarketSummary() {
         return {
             kode_saham: s.kode_saham,
             nama_perusahaan: s.nama_perusahaan,
-            open,
-            high,
-            low,
-            freq,
-            close,
-            prev,
-            pct,
-            diff,
-            vol,
-            vol_10d_pct,
-            vol_20d_pct,
-            vol_3m_pct,
-            val,
-            fNet
+            open, high, low, freq, close, prev, pct, diff, vol,
+            vol_10d_pct, vol_20d_pct, vol_3m_pct, val, fNet
         };
     });
 
-    renderMovers();
-    renderMarketActivity();
-    const q = searchSummary.value.trim().toUpperCase();
-    if (q) {
-        renderSummaryTable(globalMarketData.filter(s => s.kode_saham.includes(q)));
-    } else {
-        renderSummaryTable(globalMarketData);
-    }
+    // Clean and cache Fundamental Screener
+    globalScreenerData = screener.results.map(s => {
+        let per = parseIndoNum(s.per_);
+        let pbv = parseIndoNum(s.pbv);
+        let roe = parseIndoNum(s.roe_pct);
+        let roa = parseIndoNum(s.roa_pct);
+        let npm = parseIndoNum(s.npm_pct);
+        let der = parseIndoNum(s.der);
+        let mCap = parseIndoNum(s.mkt_cap);
+
+        return {
+            kode_saham: s.kode_saham,
+            nama_perusahaan: s.nama_perusahaan,
+            sektor: s.sektor || 'Unclassified',
+            industri: s.industri || 'Unclassified',
+            per, pbv, roe, roa, npm, der, mCap
+        };
+    });
+
+    // Extract unique sectors
+    const sectors = new Set(globalScreenerData.map(s => s.sektor));
+    sectorList = Array.from(sectors).sort();
     
-    // Auto-select and inspect the first stock to showcase the institutional upgrade
-    if (globalMarketData && globalMarketData.length > 0) {
-        const firstTicker = globalMarketData[0].kode_saham;
-        setTimeout(() => {
-            const firstRow = document.querySelector(`.clickable-row[data-ticker="${firstTicker}"]`);
-            if (firstRow) {
-                firstRow.classList.add('selected-row');
-                showStockDetailPanel(firstTicker);
-            }
-        }, 500);
-    }
+    // Populate Sector filter dropdown
+    const sectorFilter = document.getElementById('sector-filter');
+    sectorFilter.innerHTML = '<option value="">All Sectors</option>' + 
+        sectorList.map(sec => `<option value="${sec}">${sec}</option>`).join('');
 
-    loadedTabs['tab-summary'] = true;
-    return true;
-}
+    // Clean and cache Shareholders
+    globalShareholderData = shareholders.results.map(s => {
+        let shares = parseIndoNum(s.jumlah_saham);
+        let pct = parseIndoNum(s.persentase);
+        let change = parseIndoNum(s.perubahan);
 
-function renderMovers() {
-    if (!globalMarketData) return;
+        return {
+            tanggal_laporan: s.tanggal_laporan,
+            kode_emiten: s.kode_emiten,
+            nama_pemegang_saham: s.nama_pemegang_saham,
+            jenis: inferInvestorType(s.nama_pemegang_saham, s.status),
+            jumlah_saham: shares,
+            persentase: pct,
+            perubahan: change
+        };
+    });
 
-    // Filter valid traded stocks
-    const traded = globalMarketData.filter(s => s.vol > 0 && s.prev > 0);
-    
-    // Sort
-    const gainers = [...traded].sort((a, b) => b.pct - a.pct).slice(0, 5);
-    const losers = [...traded].sort((a, b) => a.pct - b.pct).slice(0, 5);
+    // Cache Leaderboard listings
+    globalLeaderboardData = leaderboard.results || [];
 
-    // Render Gainers
-    document.getElementById('gainers-list').innerHTML = gainers.map(s => `
-        <div class="mover-item">
-            <div>
-                <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price">${formatNum(s.close)}</div>
-            </div>
-            <div class="m-change positive">+${s.diff} (+${s.pct.toFixed(2)}%)</div>
-        </div>`).join('');
-
-    // Render Losers
-    document.getElementById('losers-list').innerHTML = losers.map(s => `
-        <div class="mover-item">
-            <div>
-                <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price">${formatNum(s.close)}</div>
-            </div>
-            <div class="m-change negative">${s.diff} (${s.pct.toFixed(2)}%)</div>
-        </div>`).join('');
-
+    // Render components
     renderLeaderboard();
+    renderMovers();
+    applyGlobalFilters();
+
+    // Auto-select the first stock from the Leaderboard on initial load
+    if (globalLeaderboardData.length > 0) {
+        const topStock = globalLeaderboardData[0].kode_saham;
+        setTimeout(() => {
+            const topRow = document.querySelector(`tr[data-ticker="${topStock}"]`);
+            if (topRow) topRow.classList.add('selected-row');
+            showStockDetailPanel(topStock);
+        }, 300);
+    }
 }
 
-async function renderLeaderboard() {
-    const data = await fetchAPI('/market/leaderboard');
-    if (!data || !data.results || data.results.length === 0) return;
-    
-    const container = document.getElementById('leaderboard-list');
-    if (!container) return;
-    
-    container.innerHTML = data.results.map(s => {
-        let badgeColor = s.score >= 80 ? 'var(--neon-green)' : (s.score >= 40 ? '#f59e0b' : 'var(--neon-red)');
-        
+// --------------------------------------------------------------------------
+// Sidebar Component Renderers
+// --------------------------------------------------------------------------
+function renderLeaderboard() {
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+
+    if (globalLeaderboardData.length === 0) {
+        list.innerHTML = '<div class="center" style="font-size:0.8rem; color:var(--text-muted);">No Leaderboard Data</div>';
+        return;
+    }
+
+    list.innerHTML = globalLeaderboardData.map(s => {
+        const score = s.score || 0;
+        const grade = s.grade || 'F';
+        let gradeClass = 'grade-f';
+        if (score >= 80) gradeClass = 'grade-a';
+        else if (score >= 60) gradeClass = 'grade-b';
+        else if (score >= 40) gradeClass = 'grade-c';
+        else if (score >= 20) gradeClass = 'grade-d';
+
         return `
-        <div class="mover-item clickable-leaderboard" onclick="showStockDetailPanel('${s.kode_saham}')" style="cursor:pointer;" title="Score: ${s.score}/100 • Click to inspect details">
+        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer;" title="Score: ${score}/100 • Click to inspect Details">
             <div>
                 <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price" style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">Score: ${s.score}</div>
+                <div class="m-price">Score: ${score}</div>
             </div>
-            <div class="m-change" style="color:${badgeColor}; font-weight:700; font-size:1.15rem; font-family:'Outfit',sans-serif;">${s.grade}</div>
+            <div class="badge-grade ${gradeClass}">${grade}</div>
         </div>
         `;
     }).join('');
 }
 
-function renderMarketActivity() {
+function renderMovers() {
     if (!globalMarketData) return;
-    
-    let totalVal = 0, totalVol = 0, totalFNet = 0;
-    globalMarketData.forEach(s => {
-        totalVal += s.val;
-        totalVol += s.vol;
-        totalFNet += s.fNet;
-    });
 
-    document.getElementById('stat-value').textContent = formatMoney(totalVal);
-    document.getElementById('stat-volume').textContent = formatMoney(totalVol);
-    
-    const fNetEl = document.getElementById('stat-foreign');
-    fNetEl.textContent = formatMoney(Math.abs(totalFNet));
-    fNetEl.className = 'value ' + (totalFNet > 0 ? 'txt-green' : 'txt-red');
-    if (totalFNet < 0) fNetEl.textContent = '-' + fNetEl.textContent;
-}
+    const traded = globalMarketData.filter(s => s.vol > 0 && s.prev > 0);
+    const gainers = [...traded].sort((a, b) => b.pct - a.pct).slice(0, 5);
+    const losers = [...traded].sort((a, b) => a.pct - b.pct).slice(0, 5);
 
-// ─────────────────────────────────────────────────────────────
-// TAB DATA LOADERS
-// ─────────────────────────────────────────────────────────────
-
-async function loadTabContent(targetId) {
-    if (loadedTabs[targetId]) return;
-
-    if (targetId === 'tab-screener') {
-        const data = await fetchAPI('/market/screener');
-        if (data) {
-            globalScreenerData = data.results.map(r => ({
-                kode_saham: r.kode_saham,
-                nama_perusahaan: r.nama_perusahaan,
-                sektor: r.sektor || '-',
-                industri: r.industri || '-',
-                pe: parseIndoNum(r.per, true),
-                pbv: parseIndoNum(r.pbv, true),
-                roe: parseIndoNum(r.roe_pct, true),
-                roa: parseIndoNum(r.roa_pct, true),
-                npm: parseIndoNum(r.npm_pct, true),
-                der: parseIndoNum(r.der, true),
-                mc: parseIndoNum(r.mkt_cap, true)
-            }));
-            
-            const sectors = [...new Set(globalScreenerData.map(r => r.sektor).filter(s => s !== '-'))].sort();
-            const industries = [...new Set(globalScreenerData.map(r => r.industri).filter(s => s !== '-'))].sort();
-            
-            initMultiSelect('ms-sector', sectors, selectedSectors);
-            initMultiSelect('ms-industry', industries, selectedIndustries);
-            
-            applyScreenerFilters();
-        }
-    } 
-    else if (targetId === 'tab-shareholders') {
-        if (!globalShareholdersData) {
-            const data = await fetchAPI('/market/shareholders?page=1&per_page=2000');
-            if (data) globalShareholdersData = data.results;
-        }
-        if (globalShareholdersData) renderShareholdersTable(globalShareholdersData);
-    }
-
-    loadedTabs[targetId] = true;
-}
-
-function applyScreenerFilters() {
-    if (!globalScreenerData) return;
-    const query = searchScreener.value.trim().toUpperCase();
-    let filtered = globalScreenerData;
-    
-    if (query) filtered = filtered.filter(s => s.kode_saham.includes(query));
-    if (selectedSectors.length > 0) filtered = filtered.filter(s => selectedSectors.includes(s.sektor));
-    if (selectedIndustries.length > 0) filtered = filtered.filter(s => selectedIndustries.includes(s.industri));
-    
-    renderScreenerTable(filtered);
-}
-
-function initMultiSelect(elementId, items, selectedArray) {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    const header = el.querySelector('.ms-header');
-    const dropdown = el.querySelector('.ms-dropdown');
-    
-    header.innerHTML = `All ${el.getAttribute('data-name')}s \u25BE`;
-    dropdown.innerHTML = items.map(t => `<label><input type="checkbox" value="${t}"> ${t.length > 30 ? t.substring(0,30)+'...' : t}</label>`).join('');
-    
-    header.onclick = (e) => {
-        const isHidden = dropdown.style.display === 'none';
-        document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none');
-        dropdown.style.display = isHidden ? 'block' : 'none';
-        e.stopPropagation();
-    };
-    
-    dropdown.querySelectorAll('input').forEach(chk => {
-        chk.addEventListener('change', (e) => {
-            if (e.target.checked) selectedArray.push(e.target.value);
-            else selectedArray.splice(selectedArray.indexOf(e.target.value), 1);
-            
-            header.innerHTML = selectedArray.length === 0 ? `All ${el.getAttribute('data-name')}s \u25BE` : `${selectedArray.length} Selected \u25BE`;
-            applyScreenerFilters();
-        });
-    });
-}
-
-document.addEventListener('click', () => document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display = 'none'));
-
-// ─────────────────────────────────────────────────────────────
-// TABLE RENDERERS
-// ─────────────────────────────────────────────────────────────
-
-function renderSummaryTable(results) {
-    const tbody = document.querySelector('#table-summary tbody');
-    if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="14" class="center">No data available</td></tr>';
-        return;
-    }
-
-    // Assign data attributes for sorting logic
-    tbody.innerHTML = results.map(r => {
-        let colorClass = r.pct > 0 ? 'txt-green' : (r.pct < 0 ? 'txt-red' : '');
-        let fNetColor = r.fNet > 0 ? 'txt-green' : (r.fNet < 0 ? 'txt-red' : '');
-        
-        let c10 = r.vol_10d_pct > 0 ? 'txt-green' : (r.vol_10d_pct < 0 ? 'txt-red' : '');
-        let c20 = r.vol_20d_pct > 0 ? 'txt-green' : (r.vol_20d_pct < 0 ? 'txt-red' : '');
-        let c3m = r.vol_3m_pct > 0 ? 'txt-green' : (r.vol_3m_pct < 0 ? 'txt-red' : '');
-        
-        return `
-        <tr class="clickable-row" data-ticker="${r.kode_saham}" title="Click to inspect deep-dive institutional analytics for ${r.kode_saham}">
-            <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
-            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 18 ? r.nama_perusahaan.substring(0,18)+'...' : r.nama_perusahaan}</td>
-            <td class="right" data-value="${r.open}">${formatNum(r.open)}</td>
-            <td class="right" data-value="${r.high}">${formatNum(r.high)}</td>
-            <td class="right" data-value="${r.low}">${formatNum(r.low)}</td>
-            <td class="right" data-value="${r.close}">${formatNum(r.close)}</td>
-            <td class="right ${colorClass}" data-value="${r.pct}">${formatPct(r.pct)}</td>
-            <td class="right" data-value="${r.vol}">${formatNum(r.vol)}</td>
-            <td class="right ${c10}" data-value="${r.vol_10d_pct}">${formatPct(r.vol_10d_pct)}</td>
-            <td class="right ${c20}" data-value="${r.vol_20d_pct}">${formatPct(r.vol_20d_pct)}</td>
-            <td class="right ${c3m}" data-value="${r.vol_3m_pct}">${formatPct(r.vol_3m_pct)}</td>
-            <td class="right" data-value="${r.val}">${formatMoney(r.val)}</td>
-            <td class="right" data-value="${r.freq}">${formatNum(r.freq)}</td>
-            <td class="right ${fNetColor}" data-value="${r.fNet}">${formatNum(r.fNet)}</td>
-        </tr>
-        `;
-    }).join('');
-}
-
-function renderScreenerTable(results) {
-    const tbody = document.querySelector('#table-screener tbody');
-    if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="11" class="center">No data available</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = results.map(r => {
-        let roeColor = r.roe > 0 ? 'txt-green' : (r.roe < 0 ? 'txt-red' : '');
-        let roaColor = r.roa > 0 ? 'txt-green' : (r.roa < 0 ? 'txt-red' : '');
-        let npmColor = r.npm > 0 ? 'txt-green' : (r.npm < 0 ? 'txt-red' : '');
-        let derColor = r.der > 2 ? 'txt-red' : (r.der > 0 && r.der <= 1 ? 'txt-green' : '');
-        let peColor = r.pe > 0 && r.pe < 15 ? 'txt-green' : (r.pe > 25 || r.pe < 0 ? 'txt-red' : '');
-        let formatVal = (v) => v === null ? '-' : v.toFixed(2);
-        
-        return `
-        <tr>
-            <td class="t-code" data-value="${r.kode_saham}">${r.kode_saham}</td>
-            <td data-value="${r.nama_perusahaan}" title="${r.nama_perusahaan}">${r.nama_perusahaan.length > 18 ? r.nama_perusahaan.substring(0,18)+'...' : r.nama_perusahaan}</td>
-            <td data-value="${r.sektor}">${r.sektor}</td>
-            <td data-value="${r.industri}">${r.industri.length > 18 ? r.industri.substring(0,18)+'...' : r.industri}</td>
-            <td class="right ${peColor}" data-value="${r.pe}">${formatVal(r.pe)}</td>
-            <td class="right" data-value="${r.pbv}">${formatVal(r.pbv)}</td>
-            <td class="right ${roeColor}" data-value="${r.roe}">${formatVal(r.roe)}</td>
-            <td class="right ${roaColor}" data-value="${r.roa}">${formatVal(r.roa)}</td>
-            <td class="right ${npmColor}" data-value="${r.npm}">${formatVal(r.npm)}</td>
-            <td class="right ${derColor}" data-value="${r.der}">${formatVal(r.der)}</td>
-            <td class="right" data-value="${r.mc}">${r.mc === null ? '-' : formatMoney(r.mc)}</td>
-        </tr>
-    `}).join('');
-}
-
-function inferInvestorType(name, status) {
-    const n = name.toUpperCase();
-    if (n.includes("REKSA DANA") || n.includes("REKSADANA") || n.includes("MUTUAL FUND") || n.includes("FUND ") || n.includes("ASSET MANAGEMENT") || n.includes("INVESTMENT")) {
-        return "Mutual Fund";
-    }
-    if (n.includes("ASURANSI") || n.includes("INSURANCE") || n.includes("PENSION") || n.includes("BPJS") || n.includes("TASPEN") || n.includes("DAPEN")) {
-        return "Insurance/Pension";
-    }
-    if (n.includes("BANK") || n.includes("CUSTODIAN") || n.includes("NOMINEES") || n.includes("TRUST") || n.includes("S/A")) {
-        return "Custodian/Trustee";
-    }
-    if (n.includes("PEMERINTAH") || n.includes("REPUBLIK INDONESIA") || n.includes("STATE OF") || n.includes("GOVERNMENT")) {
-        return "Government/Sovereign";
-    }
-    if (n.startsWith("PT ") || n.startsWith("PT.") || n.includes(" TBK") || n.includes(" LTD") || n.includes(" CORP") || n.includes(" INC") || n.includes(" HOLDINGS") || n.includes(" CO ")) {
-        return "Corporate Entity";
-    }
-    return status === "Lokal" ? "Local Entity" : "Foreign Entity";
-}
-
-function renderShareholdersTable(results) {
-    const tbody = document.querySelector('#table-shareholders tbody');
-    if (!results || !results.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="center">No data available</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = results.map(r => {
-        let sharesCurr = parseEngNum(r.jumlah_saham_current);
-        let pctCurr = parseEngNum(r.pct_current);
-        let pctPrev = parseEngNum(r.pct_previous);
-        
-        // Ownership percentage point change (e.g. 22.67% → 21.50% = -1.17 pp)
-        let changePct = parseFloat((pctCurr - pctPrev).toFixed(4));
-        
-        // Share change: parse using clean english parser
-        let changeShares = parseEngNum(r.perubahan);
-        if (changeShares === 0 && sharesCurr !== parseEngNum(r.jumlah_saham_previous)) {
-            // fallback to calculation if raw perubahan field has parsing mismatch
-            changeShares = sharesCurr - parseEngNum(r.jumlah_saham_previous);
-        }
-        
-        // Color based on share change direction
-        let sign = changeShares > 0 ? '+' : '';
-        let colorClass = changeShares > 0 ? 'txt-green' : (changeShares < 0 ? 'txt-red' : '');
-        let rDate = r.report_date.split('T')[0];
-
-        // Format change cell
-        let changeDisplay;
-        if (changeShares === 0 && Math.abs(changePct) < 0.005) {
-            changeDisplay = `<span class="txt-muted">—</span>`;
-        } else {
-            let pctSign = changePct > 0 ? '+' : '';
-            let pctDisplay = Math.abs(changePct) >= 0.005 ? `<br><small>(${pctSign}${changePct.toFixed(2)} pp)</small>` : '';
-            changeDisplay = `${sign}${formatNum(changeShares)}${pctDisplay}`;
-        }
-
-        // Clean Type Display using dynamic inference
-        let typeVal = r.jenis;
-        if (!typeVal || typeVal.trim() === '') {
-            typeVal = inferInvestorType(r.nama_pemegang_saham, r.status);
-        }
-        let typeDisplay = r.status ? `${typeVal} (${r.status})` : typeVal;
-
-        return `
-        <tr>
-            <td data-value="${rDate}">${rDate}</td>
-            <td class="t-code" data-value="${r.kode_emiten}">${r.kode_emiten}</td>
-            <td data-value="${r.nama_pemegang_saham}" title="${r.nama_pemegang_saham}">${r.nama_pemegang_saham.length > 20 ? r.nama_pemegang_saham.substring(0,20)+'...' : r.nama_pemegang_saham}</td>
-            <td data-value="${typeDisplay}">${typeDisplay}</td>
-            <td class="right" data-value="${sharesCurr}">${formatNum(sharesCurr)}</td>
-            <td class="right" data-value="${pctCurr}">${pctCurr.toFixed(2)}</td>
-            <td class="right ${colorClass}" data-value="${changeShares}">
-                ${changeDisplay}
-            </td>
-        </tr>
-    `}).join('');
-}
-
-// ─────────────────────────────────────────────────────────────
-// COLUMN SORTING
-// ─────────────────────────────────────────────────────────────
-
-function setupTableSorting() {
-    document.querySelectorAll('table.sortable th').forEach(th => {
-        th.addEventListener('click', () => {
-            const table = th.closest('table');
-            const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-            if (rows.length === 0 || rows[0].querySelector('.center')) return; // empty or loading
-
-            const index = Array.from(th.parentNode.children).indexOf(th);
-            const isAsc = th.classList.contains('asc');
-            const type = th.getAttribute('data-type') || 'string';
-
-            // Reset all th classes
-            table.querySelectorAll('th').forEach(h => h.classList.remove('asc', 'desc'));
-            th.classList.toggle('asc', !isAsc);
-            th.classList.toggle('desc', isAsc);
-
-            rows.sort((a, b) => {
-                let cellA = a.children[index];
-                let cellB = b.children[index];
-                if(!cellA || !cellB) return 0;
-
-                let valA = cellA.getAttribute('data-value') || cellA.textContent.trim();
-                let valB = cellB.getAttribute('data-value') || cellB.textContent.trim();
-
-                if (type === 'number') {
-                    return isAsc ? valA - valB : valB - valA;
-                } else {
-                    return isAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
-                }
-            });
-
-            rows.forEach(r => tbody.appendChild(r));
-        });
-    });
-}
-
-// ─────────────────────────────────────────────────────────────
-// INITIALIZATION & EVENTS
-// ─────────────────────────────────────────────────────────────
-
-function updateTimestamp() {
-    const now = new Date();
-    lastUpdated.textContent = `Last Updated: ${now.toLocaleTimeString()}`;
-}
-
-function initTabs() {
-    tabs.forEach(btn => {
-        btn.addEventListener('click', () => {
-            tabs.forEach(t => t.classList.remove('active'));
-            tabPanes.forEach(p => p.classList.remove('active'));
-            
-            btn.classList.add('active');
-            const targetId = btn.getAttribute('data-target');
-            document.getElementById(targetId).classList.add('active');
-
-            loadTabContent(targetId);
-        });
-    });
-}
-
-function setSyncing(isSyncing) {
-    if(isSyncing) {
-        refreshBtn.classList.add('syncing');
-        syncText.textContent = "Syncing...";
-        lastUpdated.textContent = "Fetching new data...";
-    } else {
-        refreshBtn.classList.remove('syncing');
-        syncText.textContent = "Sync";
-        updateTimestamp();
-    }
-}
-
-async function startSync() {
-    setSyncing(true);
-    
-    // Reset state
-    Object.keys(loadedTabs).forEach(k => loadedTabs[k] = false);
-    document.querySelectorAll('tbody').forEach(el => el.innerHTML = '<tr><td colspan="8" class="center"><div class="loader inline"></div></td></tr>');
-    
-    // Concurrently fetch all baseline models to power the UI & AI Recommendation Engine
-    const [marketOK, rawScreener, rawShares] = await Promise.all([
-        loadMarketSummary(),
-        fetchAPI('/market/screener'),
-        fetchAPI('/market/shareholders?page=1&per_page=2000')
-    ]);
-
-    if (rawScreener && rawScreener.results) globalScreenerData = rawScreener.results;
-    if (rawShares && rawShares.results) globalShareholdersData = rawShares.results;
-
-    // Fire Trade Recommender (reads from backend API)
-    await generateTradeRecommendations();
-
-    // Reload currently active tab if not summary
-    const activeTab = document.querySelector('.tab-btn.active').getAttribute('data-target');
-    if (activeTab !== 'tab-summary') {
-        await loadTabContent(activeTab);
-    }
-    
-    setSyncing(false);
-}
-
-// ─────────────────────────────────────────────────────────────
-// AI TRADE RECOMMENDATIONS ENGINE  (Unified — reads from backend)
-// ─────────────────────────────────────────────────────────────
-async function generateTradeRecommendations() {
-    const elWhale = document.getElementById('signal-whale');
-    const elForeign = document.getElementById('signal-foreign');
-    const elTech = document.getElementById('signal-tech');
-    const elLedger = document.getElementById('ai-ledger-compact');
-    if (!elWhale) return;
-
-    const data = await fetchAPI('/recommendations/history');
-    const recs = (data && data.results) ? data.results : [];
-
-    const byType = {};
-
-    // Group by signal type, prioritize the first active one we see
-    recs.forEach(r => {
-        if (!byType[r.signal_type]) {
-            byType[r.signal_type] = r;
-        } else if (!byType[r.signal_type].is_active && r.is_active) {
-            // Prefer active over stopped if both exist in history
-            byType[r.signal_type] = r;
-        }
-    });
-
-    const renderCard = (el, r, fallbackMsg) => {
-        if (!r) {
-            el.innerHTML = `<div class="txt-muted" style="font-size: 0.8rem; height: 100%; display: flex; align-items: center;">${fallbackMsg}</div>`;
-            return;
-        }
-        
-        const pnl = parseFloat(r.pct_change) || 0;
-        const pnlColor = pnl > 0 ? 'var(--neon-green)' : pnl < 0 ? '#ef4444' : 'var(--text-muted)';
-        const badgeColor = r.is_active ? 'rgba(56, 189, 248, 0.2)' : '#ef444422';
-        const badgeText = r.is_active ? `Entry: ${formatNum(r.entry_price)}` : `STOPPED @ ${formatNum(r.current_price)}`;
-        const textColor = r.is_active ? 'var(--neon-blue)' : '#ef4444';
-
-        el.innerHTML = `
+    // Gainers
+    document.getElementById('gainers-list').innerHTML = gainers.map(s => `
+        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer;" title="Click to inspect Details">
             <div>
-                <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
-                    <span class="t-code" style="font-size: 1.1rem;">${r.kode_saham}</span> 
-                    <span class="badge" style="background:${badgeColor}; color:${textColor}; border: 1px solid ${textColor}44;">${badgeText}</span>
-                </div>
-                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">
-                    ${r.is_active ? `Current: <span style="color:#a9b7c6">${formatNum(r.current_price)}</span>` : `<span style="color:#ef4444">Exit: ${r.stop_out_date}</span>`} 
-                    &bull; P&L: <span style="color:${pnlColor}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</span>
-                </div>
-                <div style="background: rgba(0,0,0,0.3); padding: 5px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem; color: var(--text-muted); margin-top: auto;">
-                    <strong style="color:var(--text-main)">Strategy:</strong> <br>${r.target_zone}
-                </div>
+                <div class="m-code">${s.kode_saham}</div>
+                <div class="m-price">${formatNum(s.close)}</div>
             </div>
-        `;
-    };
+            <div class="m-change positive">${formatPct(s.pct)}</div>
+        </div>
+    `).join('');
 
-    renderCard(elWhale, byType['Whale Accumulation'], 'No Whale accumulation traits detected today.');
-    renderCard(elForeign, byType['Institutional Flow'], 'Sideways flow. No high-volume foreign buying.');
-    renderCard(elTech, byType['Technical Pulse'], 'No valid volume breakouts detected.');
-
-    renderCompactLedger(recs);
+    // Losers
+    document.getElementById('losers-list').innerHTML = losers.map(s => `
+        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer;" title="Click to inspect Details">
+            <div>
+                <div class="m-code">${s.kode_saham}</div>
+                <div class="m-price">${formatNum(s.close)}</div>
+            </div>
+            <div class="m-change negative">${formatPct(s.pct)}</div>
+        </div>
+    `).join('');
 }
 
-// ─────────────────────────────────────────────────────────────
-// COMPACT AI PERFORMANCE LEDGER (right-side card)
-// ─────────────────────────────────────────────────────────────
-function renderCompactLedger(data) {
-    const el = document.getElementById('ai-ledger-compact');
-    if (!el) return;
+// --------------------------------------------------------------------------
+// Main Search & Filter Coordination
+// --------------------------------------------------------------------------
+function applyGlobalFilters() {
+    const query = document.getElementById('search-main').value.trim().toUpperCase();
+    const selectedSector = document.getElementById('sector-filter').value;
 
+    let filteredSummary = globalMarketData;
+    let filteredScreener = globalScreenerData;
+    let filteredShareholders = globalShareholderData;
+
+    // Apply Search
+    if (query !== '') {
+        filteredSummary = filteredSummary.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
+        filteredScreener = filteredScreener.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
+        filteredShareholders = filteredShareholders.filter(s => s.kode_emiten.includes(query) || s.nama_pemegang_saham.toUpperCase().includes(query));
+    }
+
+    // Apply Sector
+    if (selectedSector !== '') {
+        const matchingScreenerTickers = globalScreenerData
+            .filter(s => s.sektor === selectedSector)
+            .map(s => s.kode_saham);
+
+        filteredSummary = filteredSummary.filter(s => matchingScreenerTickers.includes(s.kode_saham));
+        filteredScreener = filteredScreener.filter(s => s.sektor === selectedSector);
+        filteredShareholders = filteredShareholders.filter(s => matchingScreenerTickers.includes(s.kode_emiten));
+    }
+
+    // Default Sorting: Map confirmation grades from Leaderboard to tables, sort descending by score
+    const scoreMap = {};
+    const gradeMap = {};
+    globalLeaderboardData.forEach(item => {
+        scoreMap[item.kode_saham] = item.score;
+        gradeMap[item.kode_saham] = item.grade;
+    });
+
+    const addSortScores = arr => arr.map(item => ({
+        ...item,
+        _score: scoreMap[item.kode_saham || item.kode_emiten] || 0,
+        _grade: gradeMap[item.kode_saham || item.kode_emiten] || 'F'
+    })).sort((a, b) => b._score - a._score);
+
+    renderSummaryTable(addSortScores(filteredSummary));
+    renderScreenerTable(addSortScores(filteredScreener));
+    renderShareholdersTable(filteredShareholders);
+}
+
+// --------------------------------------------------------------------------
+// Data Table Renderers
+// --------------------------------------------------------------------------
+function renderSummaryTable(data) {
+    const tbody = document.querySelector('#table-summary tbody');
     if (!data || data.length === 0) {
-        el.innerHTML = '<div class="txt-muted" style="font-size: 0.78rem; text-align:center; padding: 20px 0;">No signals yet. Trigger a scrape to generate AI picks.</div>';
+        tbody.innerHTML = '<tr><td colspan="12" class="center">No Summary Data Available</td></tr>';
         return;
     }
 
-    // Only show top 5 on dashboard — full list on tracker.html
-    const displayData = data.slice(0, 5);
+    tbody.innerHTML = data.map(s => {
+        let fNetColor = s.fNet > 0 ? 'txt-green' : (s.fNet < 0 ? 'txt-red' : '');
+        let pctColor = s.pct > 0 ? 'txt-green' : (s.pct < 0 ? 'txt-red' : '');
+        
+        let c10 = s.vol_10d_pct > 0 ? 'txt-green' : (s.vol_10d_pct < 0 ? 'txt-red' : '');
+        let c20 = s.vol_20d_pct > 0 ? 'txt-green' : (s.vol_20d_pct < 0 ? 'txt-red' : '');
+        let c3m = s.vol_3m_pct > 0 ? 'txt-green' : (s.vol_3m_pct < 0 ? 'txt-red' : '');
 
-    el.innerHTML = displayData.map(r => {
-        const pnl = parseFloat(r.pct_change) || 0;
-        const pnlColor = pnl > 0 ? 'var(--neon-green)' : pnl < 0 ? '#ef4444' : 'var(--text-muted)';
-        const pnlText = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
-
-        const signalColor = r.signal_type === 'Whale Accumulation' ? '#8b5cf6'
-            : r.signal_type === 'Institutional Flow' ? 'var(--neon-blue)'
-            : 'var(--neon-green)';
-
-        const shortLabel = r.signal_type === 'Whale Accumulation' ? 'WHALE'
-            : r.signal_type === 'Institutional Flow' ? 'FLOW'
-            : 'TECH';
-
-        let statusBadge = '';
-        if (!r.is_active) {
-            statusBadge = `<span style="font-size:0.65rem; padding: 1px 4px; border-radius:3px; background:#ef444422; color:#ef4444; border:1px solid #ef444444; margin-left: 5px;">STOPPED (${r.stop_out_date})</span>`;
-        }
-
-        let peakInfo = '';
-        if (r.max_profit_pct > 0) {
-            peakInfo = `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">Peak: <span style="color:var(--neon-green)">+${r.max_profit_pct.toFixed(2)}%</span> on ${r.max_profit_date || '--'}</div>`;
-        }
+        let gradeClass = 'grade-f';
+        if (s._score >= 80) gradeClass = 'grade-a';
+        else if (s._score >= 60) gradeClass = 'grade-b';
+        else if (s._score >= 40) gradeClass = 'grade-c';
+        else if (s._score >= 20) gradeClass = 'grade-d';
 
         return `
-        <div class="ai-rec-row" style="flex-direction: column; align-items: stretch; padding: 8px 10px; height: auto;">
-            <div style="display:flex; align-items:center; justify-content: space-between;">
-                <div style="display:flex; align-items:center;">
-                    <span class="ai-rec-code">${r.kode_saham}</span>
-                    <span class="ai-rec-signal" style="background:${signalColor}18; color:${signalColor}; border:1px solid ${signalColor}44; margin-left:8px;">${shortLabel}</span>
-                    ${statusBadge}
-                </div>
-                <span class="ai-rec-pnl" style="color:${pnlColor}; font-weight:bold;">${pnlText}</span>
-            </div>
-            <div style="display:flex; justify-content: space-between; margin-top: 4px; font-size: 0.75rem; color: #a9b7c6;">
-                <span>Entry: ${formatNum(r.entry_price)} <span style="color:var(--text-muted); font-size:0.65rem;">(${r.date})</span> &bull; Current: ${formatNum(r.current_price)}</span>
-            </div>
-            ${peakInfo}
-        </div>`;
+        <tr class="clickable-row" data-ticker="${s.kode_saham}">
+            <td class="t-code">${s.kode_saham}</td>
+            <td style="max-width:200px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_perusahaan}">${s.nama_perusahaan}</td>
+            <td class="right t-num">${formatNum(s.close)}</td>
+            <td class="right t-num ${pctColor}">${formatPct(s.pct)}</td>
+            <td class="right t-num">${formatMoney(s.vol)}</td>
+            <td class="right t-num ${c10}">${formatPct(s.vol_10d_pct)}</td>
+            <td class="right t-num ${c20}">${formatPct(s.vol_20d_pct)}</td>
+            <td class="right t-num ${c3m}">${formatPct(s.vol_3m_pct)}</td>
+            <td class="right t-num">${formatMoney(s.val)}</td>
+            <td class="right t-num">${formatNum(s.freq)}</td>
+            <td class="right t-num ${fNetColor}">${formatNum(s.fNet)}</td>
+            <td class="center"><span class="badge-grade ${gradeClass}">${s._grade}</span></td>
+        </tr>
+        `;
     }).join('');
 }
 
-let peChart = null;
-let pbvChart = null;
-let flowTimelineChart = null;
-let ownershipChart = null;
+function renderScreenerTable(data) {
+    const tbody = document.querySelector('#table-screener tbody');
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="center">No Screener Data Available</td></tr>';
+        return;
+    }
 
-function destroyCharts() {
-    if (peChart) { peChart.destroy(); peChart = null; }
-    if (pbvChart) { pbvChart.destroy(); pbvChart = null; }
-    if (flowTimelineChart) { flowTimelineChart.destroy(); flowTimelineChart = null; }
-    if (ownershipChart) { ownershipChart.destroy(); ownershipChart = null; }
+    tbody.innerHTML = data.map(s => {
+        let peColor = s.per > 0 && s.per < 15 ? 'txt-green' : (s.per > 25 || s.per < 0 ? 'txt-red' : '');
+        let pbvColor = s.pbv > 0 && s.pbv < 1.5 ? 'txt-green' : (s.pbv > 3 ? 'txt-red' : '');
+        let roeColor = s.roe > 15 ? 'txt-green' : (s.roe < 5 ? 'txt-red' : '');
+        let npmColor = s.npm > 15 ? 'txt-green' : (s.npm < 5 ? 'txt-red' : '');
+
+        return `
+        <tr class="clickable-row" data-ticker="${s.kode_saham}">
+            <td class="t-code">${s.kode_saham}</td>
+            <td style="max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_perusahaan}">${s.nama_perusahaan}</td>
+            <td>${s.sektor}</td>
+            <td style="max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.industri}">${s.industri}</td>
+            <td class="right t-num ${peColor}">${s.per.toFixed(2)}</td>
+            <td class="right t-num ${pbvColor}">${s.pbv.toFixed(2)}</td>
+            <td class="right t-num ${roeColor}">${formatPct(s.roe)}</td>
+            <td class="right t-num">${formatPct(s.roa)}</td>
+            <td class="right t-num ${npmColor}">${formatPct(s.npm)}</td>
+            <td class="right t-num">${s.der.toFixed(2)}</td>
+            <td class="right t-num">${formatMoney(s.mCap)}</td>
+        </tr>
+        `;
+    }).join('');
 }
 
-function initDetailTabs() {
-    const detailTabs = document.querySelectorAll('.detail-tab-btn');
-    const detailPanes = document.querySelectorAll('.detail-tab-pane');
-    
-    detailTabs.forEach(btn => {
-        btn.addEventListener('click', () => {
-            detailTabs.forEach(t => t.classList.remove('active'));
-            detailPanes.forEach(p => p.classList.remove('active'));
-            
-            btn.classList.add('active');
-            const targetId = btn.getAttribute('data-target');
-            document.getElementById(targetId).classList.add('active');
-            
-            // Fix ApexCharts sizing
-            setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-            }, 100);
-        });
-    });
+function renderShareholdersTable(data) {
+    const tbody = document.querySelector('#table-shareholders tbody');
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="center">No Shareholders Data Available</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(s => {
+        let changeColor = s.perubahan > 0 ? 'txt-green' : (s.perubahan < 0 ? 'txt-red' : '');
+        let ppText = '';
+        
+        if (Math.abs(s.perubahan) > 0.0001) {
+            ppText = ` (${s.perubahan > 0 ? '+' : ''}${s.perubahan.toFixed(2)} pp)`;
+        }
+
+        return `
+        <tr class="clickable-row" data-ticker="${s.kode_emiten}">
+            <td>${s.tanggal_laporan}</td>
+            <td class="t-code">${s.kode_emiten}</td>
+            <td style="max-width:240px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_pemegang_saham}">${s.nama_pemegang_saham}</td>
+            <td>${s.jenis}</td>
+            <td class="right t-num">${formatNum(s.jumlah_saham)}</td>
+            <td class="right t-num">${s.persentase.toFixed(2)}%</td>
+            <td class="right t-num ${changeColor}">${formatNum(s.perubahan)}${ppText}</td>
+        </tr>
+        `;
+    }).join('');
 }
 
-function renderCircularGauge(containerId, score, maxScore, color) {
+// --------------------------------------------------------------------------
+// Circular SVG Gauge Maker (Confirmation Gauges)
+// --------------------------------------------------------------------------
+function createCircularGauge(containerId, score, maxScore, color) {
+    const pct = Math.min(100, Math.max(0, (score / maxScore) * 100));
     const container = document.getElementById(containerId);
     if (!container) return;
-    
-    const pct = Math.min(Math.max(score / maxScore, 0), 1);
-    const radius = 20;
-    const circ = 2 * Math.PI * radius;
-    const offset = circ - (pct * circ);
+    const radius = 18;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (pct / 100) * circumference;
     
     container.innerHTML = `
-        <svg class="gauge-svg" width="50" height="50" viewBox="0 0 50 50">
-            <circle class="gauge-track" cx="25" cy="25" r="${radius}" />
-            <circle class="gauge-fill" cx="25" cy="25" r="${radius}" 
-                stroke="${color}" 
-                stroke-dasharray="${circ}" 
-                stroke-dashoffset="${offset}" />
-            <text class="gauge-text" x="25" y="27" font-size="9" fill="var(--text-main)">${score}</text>
+        <svg viewBox="0 0 44 44" style="width:100%; height:100%;">
+            <circle cx="22" cy="22" r="${radius}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3" />
+            <circle cx="22" cy="22" r="${radius}" fill="none" stroke="${color}" stroke-width="3.5" 
+                    stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}"
+                    stroke-linecap="round" style="transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.4s ease;" />
+            <text x="22" y="26" text-anchor="middle" fill="#fff" font-size="8.5" font-family="'JetBrains Mono', monospace" font-weight="700">${score}</text>
         </svg>
     `;
 }
 
+// --------------------------------------------------------------------------
+// Stock Detail Drawer & ApexCharts Visualizations
+// --------------------------------------------------------------------------
 async function showStockDetailPanel(ticker) {
     if (!globalMarketData) return;
     const stock = globalMarketData.find(s => s.kode_saham === ticker);
     if (!stock) return;
 
-    // Destroy existing charts to prevent overlap
-    destroyCharts();
+    activeTicker = ticker;
 
-    // Populate surface header
+    // Highlight row selections
+    document.querySelectorAll('tr[data-ticker]').forEach(r => r.classList.remove('selected-row'));
+    document.querySelectorAll(`tr[data-ticker="${ticker}"]`).forEach(r => r.classList.add('selected-row'));
+
+    // Populate drawer header
     document.getElementById('detail-ticker').textContent = ticker;
     document.getElementById('detail-name').textContent = stock.nama_perusahaan;
     document.getElementById('detail-close').textContent = formatNum(stock.close);
-    
-    const changeEl = document.getElementById('detail-change');
-    changeEl.textContent = `${stock.diff > 0 ? '+' : ''}${stock.diff} (${formatPct(stock.pct)})`;
-    changeEl.className = stock.pct > 0 ? 'txt-green' : (stock.pct < 0 ? 'txt-red' : '');
+    document.getElementById('detail-change').textContent = `${stock.diff > 0 ? '+' : ''}${stock.diff} (${formatPct(stock.pct)})`;
+    document.getElementById('detail-change').className = stock.pct > 0 ? 'txt-green' : (stock.pct < 0 ? 'txt-red' : '');
 
-    // Show the panel (Side Drawer)
+    // Reset charts
+    destroyCharts();
+
+    // Open Drawer panel
     const panel = document.getElementById('stock-detail-panel');
-    if (panel) {
-        panel.classList.add('open');
-    }
+    panel.classList.add('open');
 
-    // Fetch and render analytics
-    await Promise.all([
-        loadStockConfirmation(ticker),
-        loadStockValuationBands(ticker),
-        loadStockFlowSummary(ticker),
-        loadStockOwnershipTimeline(ticker)
+    // Fetch deep-dive statistics concurrently
+    const [historyData, confirmData, valuationData, ownershipData] = await Promise.all([
+        fetchAPI(`/stocks/${ticker}/history?limit=30`),
+        fetchAPI(`/stocks/${ticker}/confirmation`),
+        fetchAPI(`/stocks/${ticker}/valuation-bands`),
+        fetchAPI(`/stocks/${ticker}/ownership-timeline`)
     ]);
+
+    // 1. Render Price/Volume Chart + 5-Day Trend Analyzer Card
+    renderPriceVolumeChart(historyData);
+
+    // 2. Render Confirmation Gauges & Checklist
+    renderConfirmationDetails(confirmData);
+
+    // 3. Render Valuation Bands
+    renderValuationBands(valuationData);
+
+    // 4. Render Net Flow Summary
+    renderNetFlowSummary(ticker, historyData);
+
+    // 5. Render Ownership Float gauges & timelines
+    renderOwnershipTimeline(ownershipData);
 }
 
-async function loadStockConfirmation(ticker) {
-    const data = await fetchAPI(`/stocks/${ticker}/confirmation`);
+// 1. Price & Volume Chart Rendering + 5-Day Correlation Analysis
+function renderPriceVolumeChart(data) {
+    const trendCard = document.getElementById('detail-trend-card');
+    const badge = document.getElementById('trend-status-badge');
+    const desc = document.getElementById('trend-synthesis-text');
+    const chartContainer = document.getElementById('price-history-chart');
+
+    if (!data || !data.history || data.history.length === 0) {
+        chartContainer.innerHTML = '<div class="center" style="padding:40px; color:var(--text-muted);">No Price History Available</div>';
+        trendCard.style.display = 'none';
+        return;
+    }
+
+    trendCard.style.display = 'flex';
+    const h = data.history;
+
+    // Calculate 5-Day Correlation and Sizing
+    // Grab the last 5 days
+    const len = h.length;
+    const last5 = h.slice(Math.max(0, len - 5));
+
+    if (last5.length >= 2) {
+        const first = last5[0];
+        const last = last5[last5.length - 1];
+
+        // Vol growth: Latest session volume vs volume 5 sessions ago
+        const volChange = first.volume > 0 ? ((last.volume - first.volume) / first.volume) * 100 : 0;
+        // Price change over those 5 sessions
+        const priceChange = first.close > 0 ? ((last.close - first.close) / first.close) * 100 : 0;
+
+        let trend = 'NEUTRAL';
+        let alertClass = 'neutral';
+        let alertMsg = '';
+
+        if (volChange > 10 && priceChange > 0.5) {
+            trend = 'BULLISH';
+            alertClass = 'bullish';
+            alertMsg = `✅ <strong>Bullish Accumulation</strong>: Daily volume has surged by <strong>${volChange.toFixed(1)}%</strong> over the past 5 sessions, supporting an upward price movement of <strong>${formatPct(priceChange)}</strong>. Indicates strong institutional interest.`;
+        } else if (volChange > 10 && priceChange < -0.5) {
+            trend = 'BEARISH';
+            alertClass = 'bearish';
+            alertMsg = `⚠️ <strong>Bearish Distribution</strong>: Volume expanded by <strong>${volChange.toFixed(1)}%</strong> on a downward price trend of <strong>${formatPct(priceChange)}</strong>. Indicates heavy retail liquidation or distribution.`;
+        } else if (volChange < -10 && priceChange > 0.5) {
+            trend = 'DIVERGENT';
+            alertClass = 'neutral';
+            alertMsg = `⚠️ <strong>Volume Divergence</strong>: Price rose by <strong>${formatPct(priceChange)}</strong> but volume fell by <strong>${Math.abs(volChange).toFixed(1)}%</strong>. Rally lacks liquidity backing; possible exhaustion zone.`;
+        } else {
+            trend = 'CONSOLIDATION';
+            alertClass = 'neutral';
+            alertMsg = `⚖️ <strong>Sideways Trend</strong>: Vol growth (<strong>${volChange.toFixed(1)}%</strong>) and price changes (<strong>${formatPct(priceChange)}</strong>) are consolidating within normal bounds.`;
+        }
+
+        badge.className = `trend-badge ${alertClass}`;
+        badge.textContent = `${trend} VOLUME MATCH`;
+        desc.innerHTML = alertMsg;
+    } else {
+        trendCard.style.display = 'none';
+    }
+
+    // Chart Options
+    const dates = h.map(x => x.date);
+    const prices = h.map(x => x.close);
+    const volumes = h.map(x => x.volume);
+
+    const options = {
+        series: [
+            { name: 'Close Price', type: 'line', data: prices },
+            { name: 'Volume', type: 'column', data: volumes }
+        ],
+        chart: {
+            height: 250,
+            type: 'line',
+            toolbar: { show: false },
+            background: 'transparent'
+        },
+        stroke: {
+            width: [3, 0],
+            curve: 'smooth'
+        },
+        colors: ['#00f2fe', 'rgba(0, 242, 254, 0.15)'],
+        dataLabels: { enabled: false },
+        xaxis: {
+            categories: dates,
+            axisBorder: { show: false },
+            labels: {
+                style: { colors: '#94a3b8', fontSize: '10px' },
+                rotate: -30,
+                rotateAlways: false
+            }
+        },
+        yaxis: [
+            {
+                title: { text: 'Price (IDR)', style: { color: '#00f2fe' } },
+                labels: { style: { colors: '#94a3b8' } }
+            },
+            {
+                opposite: true,
+                title: { text: 'Volume', style: { color: 'rgba(0, 242, 254, 0.6)' } },
+                labels: {
+                    formatter: v => formatMoney(v),
+                    style: { colors: '#94a3b8' }
+                }
+            }
+        ],
+        grid: { borderColor: 'rgba(255,255,255,0.05)' },
+        theme: { mode: 'dark' },
+        tooltip: { shared: true }
+    };
+
+    chartPriceVolume = new ApexCharts(chartContainer, options);
+    chartPriceVolume.render();
+}
+
+// 2. Confirmation Matrix Score breakdowns & checklist rendering
+function renderConfirmationDetails(data) {
     if (!data) return;
 
-    // Update Grade Badge
+    // Composite grade badge
+    const score = data.total_score || 0;
+    const grade = data.grade || '--';
     const gradeEl = document.getElementById('detail-grade');
-    gradeEl.textContent = `Grade: ${data.grade}`;
     
-    let gradeColor = 'var(--neon-green)';
-    if (data.grade === 'F') gradeColor = 'var(--neon-red)';
-    else if (data.grade.startsWith('D') || data.grade.startsWith('C')) gradeColor = '#f59e0b';
-    else if (data.grade.startsWith('B')) gradeColor = 'var(--neon-blue)';
-    
-    gradeEl.style.borderColor = gradeColor + '66';
-    gradeEl.style.color = gradeColor;
-    gradeEl.style.background = gradeColor + '15';
+    gradeEl.textContent = `Grade: ${grade}`;
+    gradeEl.className = 'badge-grade ' + (score >= 80 ? 'grade-a' : (score >= 60 ? 'grade-b' : (score >= 40 ? 'grade-c' : (score >= 20 ? 'grade-d' : 'grade-f'))));
 
-    // Renders circular sub-score gauges
-    renderCircularGauge('gauge-technical-container', data.technical.score, 35, 'var(--neon-blue)');
-    document.getElementById('txt-score-technical').textContent = `${data.technical.score} / 35`;
+    // Dynamic radial subscore gauges
+    createCircularGauge('gauge-technical-container', data.technical?.score || 0, 35, '#00f2fe');
+    document.getElementById('txt-score-technical').textContent = `${data.technical?.score || 0} / 35`;
 
-    renderCircularGauge('gauge-volume-container', data.volume.score, 30, '#8b5cf6');
-    document.getElementById('txt-score-volume').textContent = `${data.volume.score} / 30`;
+    createCircularGauge('gauge-volume-container', data.volume?.score || 0, 30, '#f59e0b');
+    document.getElementById('txt-score-volume').textContent = `${data.volume?.score || 0} / 30`;
 
-    renderCircularGauge('gauge-institutional-container', data.institutional.score, 35, 'var(--neon-green)');
-    document.getElementById('txt-score-institutional').textContent = `${data.institutional.score} / 35`;
+    createCircularGauge('gauge-institutional-container', data.institutional?.score || 0, 35, '#10b981');
+    document.getElementById('txt-score-institutional').textContent = `${data.institutional?.score || 0} / 35`;
 
-    // Render Checklist
-    const checklistContainer = document.getElementById('confirmation-checklist-container');
-    if (checklistContainer && data.checklist) {
-        checklistContainer.innerHTML = data.checklist.map(item => {
+    // Checklist Rows
+    const container = document.getElementById('confirmation-checklist-container');
+    if (container && data.checklist) {
+        container.innerHTML = data.checklist.map(item => {
             let icon = '⚠️';
-            if (item.status === 'pass') icon = '✅';
-            else if (item.status === 'fail') icon = '❌';
-
+            let colorClass = 'txt-orange';
+            if (item.status === 'pass') {
+                icon = '✅';
+                colorClass = 'txt-green';
+            } else if (item.status === 'fail') {
+                icon = '❌';
+                colorClass = 'txt-red';
+            }
+            
             return `
-            <div class="checklist-row ${item.status}">
-                <span>${item.label}</span>
-                <span class="checklist-icon ${item.status}">${icon} <small>${item.detail}</small></span>
+            <div class="mover-item" style="padding:10px 14px; gap:10px; background:rgba(0,0,0,0.1); justify-content:flex-start;">
+                <span style="font-size: 1.15rem; line-height:1;">${icon}</span>
+                <div style="flex-grow:1;">
+                    <div style="font-size:0.82rem; font-weight:600; color:var(--text-main);">${item.label}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">${item.detail}</div>
+                </div>
             </div>
             `;
         }).join('');
     }
 }
 
-async function loadStockValuationBands(ticker) {
-    const data = await fetchAPI(`/stocks/${ticker}/valuation-bands`);
-    if (!data) return;
+// 3. Valuation Bands (ApexCharts Area/Line Standard Deviation Zones)
+function renderValuationBands(data) {
+    const peCont = document.getElementById('pe-bands-chart');
+    const pbvCont = document.getElementById('pbv-bands-chart');
 
-    const renderSDChart = (containerId, title, metrics, currentVal) => {
-        const container = document.getElementById(containerId);
-        if (!container) return;
+    if (!data) {
+        peCont.innerHTML = '<div class="center" style="color:var(--text-muted)">Valuation Unavailable</div>';
+        pbvCont.innerHTML = '<div class="center" style="color:var(--text-muted)">Valuation Unavailable</div>';
+        return;
+    }
 
-        if (!metrics.history || metrics.history.length === 0) {
-            container.innerHTML = `<div class="txt-muted" style="padding:40px; text-align:center;">Insufficient historical valuation data to render bands.</div>`;
+    const drawBand = (container, keyData, title) => {
+        if (!keyData || !keyData.history) {
+            container.innerHTML = '<div class="center">No History</div>';
             return;
         }
 
-        const dates = metrics.history.map(p => p.date);
-        const seriesData = metrics.history.map(p => parseFloat(p.value.toFixed(2)));
+        const dates = keyData.history.map(x => x.date);
+        const values = keyData.history.map(x => x.value);
         
-        // Horizontal band boundaries
-        const mean = metrics.bands.mean;
-        const plus1 = metrics.bands.plus_1sd;
-        const plus2 = metrics.bands.plus_2sd;
-        const minus1 = metrics.bands.minus_1sd;
-        const minus2 = metrics.bands.minus_2sd;
+        const b = keyData.bands;
+        const series = [
+            { name: 'Current P/E', data: values },
+            { name: 'Mean', data: Array(dates.length).fill(b.mean) },
+            { name: '+1 SD', data: Array(dates.length).fill(b.plus_1sd) },
+            { name: '+2 SD', data: Array(dates.length).fill(b.plus_2sd) },
+            { name: '-1 SD', data: Array(dates.length).fill(b.minus_1sd) },
+            { name: '-2 SD', data: Array(dates.length).fill(b.minus_2sd) }
+        ];
 
         const options = {
+            series: series,
             chart: {
+                height: 230,
                 type: 'line',
-                height: 250,
-                background: 'transparent',
-                toolbar: { show: false },
-                animations: { enabled: true }
+                toolbar: { show: false }
             },
-            theme: { mode: 'dark' },
+            colors: ['#00f2fe', '#94a3b8', '#f59e0b', '#ef4444', '#10b981', '#047857'],
             stroke: {
-                width: [3, 1, 1, 1.5, 1, 1],
-                dashArray: [0, 5, 5, 0, 5, 5],
-                colors: ['#38bdf8', '#ef4444', '#f59e0b', '#94a3b8', '#10b981', '#059669']
+                width: [3, 1.5, 1, 1, 1, 1],
+                dashArray: [0, 5, 3, 3, 3, 3]
             },
-            series: [
-                { name: 'Actual ' + title, data: seriesData },
-                { name: '+2 SD (' + plus2.toFixed(1) + ')', data: Array(dates.length).fill(parseFloat(plus2.toFixed(2))) },
-                { name: '+1 SD (' + plus1.toFixed(1) + ')', data: Array(dates.length).fill(parseFloat(plus1.toFixed(2))) },
-                { name: 'Mean (' + mean.toFixed(1) + ')', data: Array(dates.length).fill(parseFloat(mean.toFixed(2))) },
-                { name: '-1 SD (' + minus1.toFixed(1) + ')', data: Array(dates.length).fill(parseFloat(minus1.toFixed(2))) },
-                { name: '-2 SD (' + minus2.toFixed(1) + ')', data: Array(dates.length).fill(parseFloat(minus2.toFixed(2))) }
-            ],
             xaxis: {
                 categories: dates,
-                labels: { rotate: 0, style: { colors: '#94a3b8', fontSize: '10px' } }
+                labels: { style: { colors: '#94a3b8', fontSize: '9px' } }
             },
             yaxis: {
-                labels: { style: { colors: '#94a3b8', fontSize: '10px' } }
+                labels: { style: { colors: '#94a3b8' } }
             },
-            legend: { show: true, position: 'bottom', horizontalAlign: 'center', fontSize: '10px' },
-            title: {
-                text: `${title} current: ${currentVal.toFixed(1)} (${metrics.zone.replace('_', ' ')})`,
-                align: 'left',
-                style: { fontSize: '12px', color: '#f8fafc', fontWeight: 600 }
-            },
-            grid: { borderColor: 'rgba(255,255,255,0.05)' }
+            grid: { borderColor: 'rgba(255,255,255,0.05)' },
+            theme: { mode: 'dark' },
+            legend: { show: false }
         };
 
         const chart = new ApexCharts(container, options);
@@ -882,254 +721,303 @@ async function loadStockValuationBands(ticker) {
         return chart;
     };
 
-    peChart = renderSDChart('pe-bands-chart', 'P/E Ratio', data.per, data.per.current);
-    pbvChart = renderSDChart('pbv-bands-chart', 'PBV Ratio', data.pbv, data.pbv.current);
+    chartPEBands = drawBand(peCont, data.per, 'P/E Bands');
+    chartPBVBands = drawBand(pbvCont, data.pbv, 'PBV Bands');
 }
 
-async function loadStockFlowSummary(ticker) {
-    const data = await fetchAPI(`/stocks/${ticker}/flow-summary`);
-    if (!data) return;
+// 4. Net Volume Flow summary and 5-Day Net Volume charts
+function renderNetFlowSummary(ticker, historyData) {
+    const summaryStock = globalMarketData.find(s => s.kode_saham === ticker);
+    if (!summaryStock) return;
 
-    // Render stacked flow heatbar
-    const fNet = data.foreign_net;
-    const fBuy = data.foreign_buy;
-    const fSell = data.foreign_sell;
-    const total = fBuy + fSell;
-    
-    const heatbar = document.getElementById('flow-net-heatbar');
-    const buyVal = document.getElementById('flow-buy-val');
-    const sellVal = document.getElementById('flow-sell-val');
-    const netVal = document.getElementById('flow-net-val');
+    // Stacked buy/sell heatbar
+    const buyVal = parseIndoNum(summaryStock.vol); // Using total volume as helper or calculate net
+    // Fetch flow detail
+    fetchAPI(`/stocks/${ticker}/flow-summary`).then(data => {
+        if (!data) return;
 
-    if (heatbar && buyVal && sellVal && netVal) {
+        const fBuy = data.foreign_buy || 0;
+        const fSell = data.foreign_sell || 0;
+        const total = fBuy + fSell;
+        
+        let buyPct = 50;
+        let sellPct = 50;
+        
         if (total > 0) {
-            const buyPct = (fBuy / total) * 100;
-            const sellPct = 100 - buyPct;
-            heatbar.innerHTML = `
-                <div style="width: ${buyPct}%; background: var(--neon-green); height: 100%; transition: width 0.5s;"></div>
-                <div style="width: ${sellPct}%; background: var(--neon-red); height: 100%; transition: width 0.5s;"></div>
-            `;
-        } else {
-            heatbar.innerHTML = `<div style="width: 100%; background: rgba(255,255,255,0.05); height: 100%;"></div>`;
+            buyPct = (fBuy / total) * 100;
+            sellPct = (fSell / total) * 100;
         }
 
-        buyVal.textContent = `Buy: ${formatNum(fBuy)}`;
-        sellVal.textContent = `Sell: ${formatNum(fSell)}`;
-        netVal.textContent = `${fNet > 0 ? '+' : ''}${formatNum(fNet)}`;
-        netVal.className = fNet > 0 ? 'txt-green' : (fNet < 0 ? 'txt-red' : '');
-    }
+        const heatbar = document.getElementById('flow-net-heatbar');
+        if (heatbar) {
+            heatbar.innerHTML = `
+                <div style="width: ${buyPct}%; background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green-glow); transition: width 0.4s ease;"></div>
+                <div style="width: ${sellPct}%; background: var(--neon-red); box-shadow: 0 0 10px var(--neon-red-glow); transition: width 0.4s ease;"></div>
+            `;
+        }
 
-    // Render 5D timeline using mixed column + line chart
-    const timelineContainer = document.getElementById('flow-timeline-chart');
-    if (timelineContainer && data.trend_5d && data.trend_5d.length > 0) {
-        const dates = data.trend_5d.map(p => p.date);
-        const volumes = data.trend_5d.map(p => p.volume);
-        const closes = data.trend_5d.map(p => p.close);
+        document.getElementById('flow-buy-val').textContent = `Buy: ${formatNum(fBuy)}`;
+        document.getElementById('flow-sell-val').textContent = `Sell: ${formatNum(fSell)}`;
+        
+        const netVal = document.getElementById('flow-net-val');
+        netVal.textContent = (data.foreign_net >= 0 ? '+' : '') + formatNum(data.foreign_net);
+        netVal.className = data.foreign_net >= 0 ? 'txt-green' : 'txt-red';
+
+        // 5-Day net volume bar chart
+        const timelineCont = document.getElementById('flow-timeline-chart');
+        if (!timelineCont) return;
+
+        if (!data.trend_5d || data.trend_5d.length === 0) {
+            timelineCont.innerHTML = '<div class="center" style="padding:30px; color:var(--text-muted);">No 5-Day flow details</div>';
+            return;
+        }
+
+        const dates = data.trend_5d.map(x => x.date);
+        const closes = data.trend_5d.map(x => x.close);
+        const volumes = data.trend_5d.map(x => x.volume);
 
         const options = {
+            series: [{
+                name: 'Net Flow (Shares)',
+                data: volumes
+            }],
             chart: {
                 height: 200,
-                type: 'line',
-                background: 'transparent',
+                type: 'bar',
                 toolbar: { show: false }
             },
-            theme: { mode: 'dark' },
-            stroke: { width: [0, 3], curve: 'smooth' },
-            series: [
-                { name: 'Daily Volume', type: 'column', data: volumes },
-                { name: 'Close Price', type: 'line', data: closes }
-            ],
-            fill: {
-                opacity: [0.35, 1],
-                gradient: {
-                    inverseColors: false,
-                    shade: 'dark',
-                    type: "vertical",
-                    opacityFrom: 0.85,
-                    opacityTo: 0.55,
-                    stops: [0, 100, 100, 100]
+            plotOptions: {
+                bar: {
+                    colors: {
+                        ranges: [{
+                            from: -999999999999,
+                            to: -1,
+                            color: '#ef4444'
+                        }, {
+                            from: 0,
+                            to: 999999999999,
+                            color: '#10b981'
+                        }]
+                    }
                 }
             },
-            colors: ['#8b5cf6', 'var(--neon-blue)'],
             xaxis: {
                 categories: dates,
-                labels: { style: { colors: '#94a3b8', fontSize: '9px' } }
+                labels: { style: { colors: '#94a3b8' } }
             },
-            yaxis: [
-                {
-                    title: { text: 'Volume Traded', style: { color: '#8b5cf6', fontSize: '10px' } },
-                    labels: { style: { colors: '#94a3b8', fontSize: '9px' }, formatter: formatMoney }
-                },
-                {
-                    opposite: true,
-                    title: { text: 'Price (IDR)', style: { color: 'var(--neon-blue)', fontSize: '10px' } },
-                    labels: { style: { colors: '#94a3b8', fontSize: '9px' }, formatter: formatNum }
+            yaxis: {
+                labels: { 
+                    formatter: v => formatMoney(v),
+                    style: { colors: '#94a3b8' } 
                 }
-            ],
+            },
             grid: { borderColor: 'rgba(255,255,255,0.05)' },
-            legend: { show: false }
+            theme: { mode: 'dark' }
         };
 
-        flowTimelineChart = new ApexCharts(timelineContainer, options);
-        flowTimelineChart.render();
-    }
+        chartFlowTimeline = new ApexCharts(timelineCont, options);
+        chartFlowTimeline.render();
+    });
 }
 
-async function loadStockOwnershipTimeline(ticker) {
-    const data = await fetchAPI(`/stocks/${ticker}/ownership-timeline`);
-    if (!data) return;
-
-    // Render Free Float Circular Gauge
-    const ffContainer = document.getElementById('free-float-gauge');
-    const ffStatus = document.getElementById('free-float-status');
-    if (ffContainer && ffStatus && data.free_float) {
-        const ffPct = data.free_float.current_pct;
-        let ffColor = 'var(--neon-green)';
-        if (ffPct < 15.0) ffColor = 'var(--neon-red)';
-        else if (ffPct < 20.0) ffColor = '#f59e0b';
-
-        renderCircularGauge('free-float-gauge', Math.round(ffPct), 100, ffColor);
-        
-        ffStatus.textContent = `Free Float: ${ffPct.toFixed(1)}% — ${data.free_float.status === 'COMPLIANT' ? 'Compliant ✅' : 'Non-Compliant 🚨'}`;
-        ffStatus.className = data.free_float.status === 'COMPLIANT' ? 'txt-green' : 'txt-red';
-        ffStatus.style.fontWeight = '600';
-    }
-
-    // Render HHI Concentration
+// 5. OJK Free Float circular indicator and Shareholder timeline area charts
+function renderOwnershipTimeline(data) {
+    const floatCont = document.getElementById('free-float-gauge');
     const hhiVal = document.getElementById('hhi-value');
     const hhiBar = document.getElementById('hhi-bar');
     const hhiStatus = document.getElementById('hhi-status');
-    if (hhiVal && hhiBar && hhiStatus) {
-        const hhi = data.concentration_hhi;
-        hhiVal.textContent = formatNum(hhi);
-        
-        // HHI ranges: < 1500 (low), 1500-2500 (moderate), > 2500 (high concentration)
-        let barColor = 'var(--neon-green)';
-        let statusText = "Diverse Ownership (Low Concentration)";
-        let fillPct = (hhi / 10000) * 100;
-        
-        if (hhi > 2500) {
-            barColor = 'var(--neon-red)';
-            statusText = "Monopolistic/Highly Concentrated Ownership";
-        } else if (hhi >= 1500) {
-            barColor = '#f59e0b';
-            statusText = "Moderately Concentrated Ownership Structure";
-        }
+    const timelineCont = document.getElementById('ownership-timeline-chart');
 
-        hhiBar.innerHTML = `<div style="width: ${fillPct}%; background: ${barColor}; height:100%; transition: width 0.5s;"></div>`;
-        hhiStatus.textContent = statusText;
-        hhiStatus.style.color = barColor;
-        hhiStatus.style.fontWeight = '600';
+    if (!data) {
+        floatCont.innerHTML = '<div class="center">No Float</div>';
+        hhiVal.textContent = '0';
+        hhiBar.innerHTML = '';
+        timelineCont.innerHTML = '<div class="center">No Timeline</div>';
+        return;
     }
 
-    // Render Shareholders stacked area timeline
-    const timelineContainer = document.getElementById('ownership-timeline-chart');
-    if (timelineContainer && data.dates && data.dates.length > 0 && data.holders && data.holders.length > 0) {
-        const options = {
-            chart: {
-                height: 280,
-                type: 'area',
-                background: 'transparent',
-                stacked: true,
-                toolbar: { show: false }
-            },
-            theme: { mode: 'dark' },
-            stroke: { curve: 'smooth', width: 2 },
-            series: data.holders.map(h => ({
-                name: h.name.length > 25 ? h.name.substring(0,25) + '...' : h.name,
-                data: h.series.map(v => parseFloat(v.toFixed(2)))
-            })),
-            xaxis: {
-                categories: data.dates,
-                labels: { style: { colors: '#94a3b8', fontSize: '9px' } }
-            },
-            yaxis: {
-                labels: {
-                    style: { colors: '#94a3b8', fontSize: '9px' },
-                    formatter: (val) => `${val.toFixed(1)}%`
-                },
-                max: 100
-            },
-            grid: { borderColor: 'rgba(255,255,255,0.05)' },
-            legend: { show: true, position: 'bottom', horizontalAlign: 'center', fontSize: '9px' },
-            fill: { type: 'solid', opacity: 0.65 }
-        };
+    // Circular SVG Gauge for Free Float
+    const fPct = data.free_float?.current_pct || 0;
+    const radius = 18;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (Math.min(100, fPct) / 100) * circumference;
+    const floatColor = fPct >= 15 ? 'var(--neon-green)' : 'var(--neon-red)';
+    const statusText = fPct >= 15 ? 'Compliant ✅' : 'Non-Compliant ❌';
 
-        ownershipChart = new ApexCharts(timelineContainer, options);
-        ownershipChart.render();
-    } else if (timelineContainer) {
-        timelineContainer.innerHTML = `<div class="txt-muted" style="padding:40px; text-align:center;">No major shareholder time-series available.</div>`;
+    floatCont.innerHTML = `
+        <svg viewBox="0 0 44 44" style="width:100%; height:100%;">
+            <circle cx="22" cy="22" r="${radius}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3" />
+            <circle cx="22" cy="22" r="${radius}" fill="none" stroke="${floatColor}" stroke-width="3.5" 
+                    stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}"
+                    stroke-linecap="round" style="transform: rotate(-90deg); transform-origin: 50% 50%;" />
+            <text x="22" y="24" text-anchor="middle" fill="#fff" font-size="7.5" font-family="'JetBrains Mono', monospace" font-weight="700">${fPct.toFixed(1)}%</text>
+            <text x="22" y="32" text-anchor="middle" fill="#94a3b8" font-size="4.5">Free Float</text>
+        </svg>
+    `;
+    document.getElementById('free-float-status').textContent = `OJK Status: ${statusText}`;
+    document.getElementById('free-float-status').className = fPct >= 15 ? 'txt-green' : 'txt-red';
+
+    // HHI Index concentration bar
+    const hhi = data.concentration_hhi || 0;
+    hhiVal.textContent = hhi.toFixed(1);
+    
+    let concentration = 'Diverse Ownership';
+    let hhiColor = 'var(--neon-green)';
+    let segments = `<div style="width: 100%; background: var(--neon-green)"></div>`;
+
+    if (hhi > 2500) {
+        concentration = 'Highly Concentrated';
+        hhiColor = 'var(--neon-red)';
+        segments = `<div style="width: 100%; background: var(--neon-red)"></div>`;
+    } else if (hhi > 1500) {
+        concentration = 'Moderately Concentrated';
+        hhiColor = 'var(--neon-orange)';
+        segments = `<div style="width: 100%; background: var(--neon-orange)"></div>`;
     }
+
+    hhiBar.innerHTML = segments;
+    hhiStatus.innerHTML = `Category: <strong style="color: ${hhiColor}">${concentration}</strong>`;
+
+    // Major Shareholders stacked area chart
+    if (!timelineCont) return;
+
+    if (!data.dates || data.dates.length === 0 || !data.holders) {
+        timelineCont.innerHTML = '<div class="center" style="padding:40px; color:var(--text-muted);">No shareholder timeline data available</div>';
+        return;
+    }
+
+    const series = data.holders.map(holder => ({
+        name: holder.name,
+        data: holder.series
+    }));
+
+    const options = {
+        series: series,
+        chart: {
+            height: 260,
+            type: 'area',
+            stacked: true,
+            toolbar: { show: false }
+        },
+        dataLabels: { enabled: false },
+        stroke: { curve: 'smooth', width: 2 },
+        xaxis: {
+            categories: data.dates,
+            labels: { style: { colors: '#94a3b8' } }
+        },
+        yaxis: {
+            labels: { style: { colors: '#94a3b8' } }
+        },
+        grid: { borderColor: 'rgba(255,255,255,0.05)' },
+        theme: { mode: 'dark' },
+        tooltip: { shared: true }
+    };
+
+    chartOwnershipTimeline = new ApexCharts(timelineCont, options);
+    chartOwnershipTimeline.render();
 }
 
-function init() {
-    initTabs();
-    setupTableSorting();
-    initDetailTabs();
-    
-    // Row selection and Click-to-inspect delegation
-    document.addEventListener('click', (e) => {
-        const row = e.target.closest('.clickable-row');
-        if (row) {
-            const ticker = row.getAttribute('data-ticker');
-            
-            // Remove previous selection highlights
-            document.querySelectorAll('.clickable-row').forEach(r => r.classList.remove('selected-row'));
-            row.classList.add('selected-row');
-            
-            // Trigger load detail panel
-            showStockDetailPanel(ticker);
-        }
-    });
-    
-    // Setup Isolated Search Logic
-    searchSummary.addEventListener('input', (e) => {
-        const query = e.target.value.trim().toUpperCase();
-        if (globalMarketData) {
-            if (query === '') {
-                renderSummaryTable(globalMarketData);
-            } else {
-                renderSummaryTable(globalMarketData.filter(s => s.kode_saham.includes(query)));
-            }
-        }
-    });
+// Destroy all charts instances to prevent memory leaks or overlay issues
+function destroyCharts() {
+    if (chartPriceVolume) { chartPriceVolume.destroy(); chartPriceVolume = null; }
+    if (chartPEBands) { chartPEBands.destroy(); chartPEBands = null; }
+    if (chartPBVBands) { chartPBVBands.destroy(); chartPBVBands = null; }
+    if (chartFlowTimeline) { chartFlowTimeline.destroy(); chartFlowTimeline = null; }
+    if (chartOwnershipTimeline) { chartOwnershipTimeline.destroy(); chartOwnershipTimeline = null; }
+}
 
-    searchScreener.addEventListener('input', () => {
-        applyScreenerFilters();
-    });
-    
-    // Initial Load
-    startSync();
+// --------------------------------------------------------------------------
+// UI Listeners & Orchestration Event Handlers
+// --------------------------------------------------------------------------
+function setupListeners() {
+    const searchMain = document.getElementById('search-main');
+    const sectorFilter = document.getElementById('sector-filter');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const closeDetailBtn = document.getElementById('close-detail-btn');
+    const detailPanel = document.getElementById('stock-detail-panel');
 
-    // Refresh btn
+    // Global Search & Sector Filter binding
+    searchMain.addEventListener('input', applyGlobalFilters);
+    sectorFilter.addEventListener('change', applyGlobalFilters);
+
+    // Sync button trigger
     refreshBtn.addEventListener('click', () => {
         if (!refreshBtn.classList.contains('syncing')) {
             startSync();
         }
     });
 
-    // Close Detail Drawer Listeners
-    const closeBtn = document.getElementById('close-detail-btn');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            const panel = document.getElementById('stock-detail-panel');
-            if (panel) {
-                panel.classList.remove('open');
-                document.querySelectorAll('.clickable-row').forEach(r => r.classList.remove('selected-row'));
+    // Close detail drawer trigger
+    closeDetailBtn.addEventListener('click', () => {
+        detailPanel.classList.remove('open');
+        document.querySelectorAll('tr[data-ticker]').forEach(r => r.classList.remove('selected-row'));
+    });
+
+    // Escape key binds to dismiss drawer
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && detailPanel.classList.contains('open')) {
+            detailPanel.classList.remove('open');
+            document.querySelectorAll('tr[data-ticker]').forEach(r => r.classList.remove('selected-row'));
+        }
+    });
+
+    // Tab view selectors
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            
+            btn.classList.add('active');
+            const paneId = btn.getAttribute('data-target');
+            document.getElementById(paneId).classList.add('active');
+            activeTab = paneId;
+        });
+    });
+
+    // Detailed deep dive tabs selectors
+    document.querySelectorAll('.detail-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.detail-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.detail-tab-pane').forEach(p => p.classList.remove('active'));
+
+            btn.classList.add('active');
+            const paneId = btn.getAttribute('data-target');
+            document.getElementById(paneId).classList.add('active');
+        });
+    });
+
+    // Sidebar Movers Accordions trigger
+    const bindAccordion = (headerId, contentId) => {
+        const header = document.getElementById(headerId);
+        const content = document.getElementById(contentId);
+        header.addEventListener('click', () => {
+            const isOpen = content.classList.contains('open');
+            // Close other accordions
+            document.querySelectorAll('.accordion-content').forEach(c => c.classList.remove('open'));
+            if (!isOpen) {
+                content.classList.add('open');
             }
         });
-    }
+    };
+    bindAccordion('accordion-btn-gainers', 'accordion-content-gainers');
+    bindAccordion('accordion-btn-losers', 'accordion-content-losers');
 
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            const panel = document.getElementById('stock-detail-panel');
-            if (panel && panel.classList.contains('open')) {
-                panel.classList.remove('open');
-                document.querySelectorAll('.clickable-row').forEach(r => r.classList.remove('selected-row'));
-            }
+    // Click triggers for selecting and deep diving details of stocks
+    document.addEventListener('click', (e) => {
+        const row = e.target.closest('tr[data-ticker]') || e.target.closest('.mover-item[data-ticker]');
+        if (row) {
+            const ticker = row.getAttribute('data-ticker');
+            showStockDetailPanel(ticker);
         }
     });
 }
 
-document.addEventListener('DOMContentLoaded', init);
+// --------------------------------------------------------------------------
+// Initialization Entry point
+// --------------------------------------------------------------------------
+function init() {
+    setupListeners();
+    startSync();
+}
 
+document.addEventListener('DOMContentLoaded', init);
