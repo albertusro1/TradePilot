@@ -986,21 +986,7 @@ function setupListeners() {
         });
     });
 
-    // Sidebar Movers Accordions trigger
-    const bindAccordion = (headerId, contentId) => {
-        const header = document.getElementById(headerId);
-        const content = document.getElementById(contentId);
-        header.addEventListener('click', () => {
-            const isOpen = content.classList.contains('open');
-            // Close other accordions
-            document.querySelectorAll('.accordion-content').forEach(c => c.classList.remove('open'));
-            if (!isOpen) {
-                content.classList.add('open');
-            }
-        });
-    };
-    bindAccordion('accordion-btn-gainers', 'accordion-content-gainers');
-    bindAccordion('accordion-btn-losers', 'accordion-content-losers');
+
 
     // Click triggers for selecting and deep diving details of stocks
     document.addEventListener('click', (e) => {

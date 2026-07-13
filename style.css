@@ -239,21 +239,16 @@ body {
 
 /* Settings Cog */
 .settings-cog {
-    position: absolute;
-    bottom: 1.5rem;
-    left: 1.75rem;
     background: none;
     border: none;
     color: var(--text-muted);
     font-size: 1.3rem;
     cursor: pointer;
-    opacity: 0.4;
     transition: all 0.2s ease;
 }
 
 .settings-cog:hover {
-    opacity: 1;
-    color: var(--neon-blue);
+    color: var(--neon-blue) !important;
     transform: rotate(45deg);
 }
 
