@@ -10,10 +10,123 @@ let globalMarketData = null;
 let globalScreenerData = null;
 let globalShareholderData = null;
 let globalLeaderboardData = null;
+let globalWatchlistData = [];
 
 let activeTicker = null;
 let activeTab = 'tab-summary';
 let sectorList = [];
+
+// Watchlist Zone State Management & Helpers
+function loadWatchlist() {
+    try {
+        const stored = localStorage.getItem('tradepilot_watchlist_v1');
+        if (stored) {
+            globalWatchlistData = JSON.parse(stored);
+            globalWatchlistData.forEach(item => {
+                if (item.highestPrice < item.entryPrice) item.highestPrice = item.entryPrice;
+                if (item.lowestPrice > item.entryPrice || item.lowestPrice === 0) item.lowestPrice = item.entryPrice;
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load watchlist from localStorage', e);
+        globalWatchlistData = [];
+    }
+}
+
+function saveWatchlist() {
+    try {
+        localStorage.setItem('tradepilot_watchlist_v1', JSON.stringify(globalWatchlistData));
+    } catch (e) {
+        console.error('Failed to save watchlist to localStorage', e);
+    }
+}
+
+function isWatched(ticker) {
+    return globalWatchlistData.some(w => w.ticker === ticker);
+}
+
+function toggleWatchlist(ticker) {
+    if (!globalMarketData) return;
+    const stock = globalMarketData.find(s => s.kode_saham === ticker);
+    if (!stock) return;
+
+    const existingIdx = globalWatchlistData.findIndex(w => w.ticker === ticker);
+    if (existingIdx >= 0) {
+        globalWatchlistData.splice(existingIdx, 1);
+    } else {
+        const now = new Date();
+        const dd = now.getDate().toString().padStart(2, '0');
+        const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+        const hh = now.getHours().toString().padStart(2, '0');
+        const min = now.getMinutes().toString().padStart(2, '0');
+        const dateStr = `${dd}/${mm} ${hh}:${min}`;
+        const leaderboardItem = globalLeaderboardData ? globalLeaderboardData.find(l => l.kode_saham === ticker) : null;
+        const entryGrade = leaderboardItem ? leaderboardItem.grade : 'F';
+
+        globalWatchlistData.push({
+            ticker: stock.kode_saham,
+            name: stock.nama_perusahaan,
+            entryPrice: stock.close,
+            entryDate: dateStr,
+            entryGrade: entryGrade,
+            highestPrice: stock.close,
+            lowestPrice: stock.close
+        });
+    }
+
+    saveWatchlist();
+    applyGlobalFilters();
+
+    if (activeTicker === ticker) {
+        updateDrawerWatchButton(ticker);
+    }
+}
+
+function updateWatchlistTracking() {
+    if (!globalMarketData || globalWatchlistData.length === 0) return;
+
+    let updated = false;
+    globalWatchlistData.forEach(item => {
+        const stock = globalMarketData.find(s => s.kode_saham === item.ticker);
+        if (stock) {
+            const currentClose = stock.close;
+
+            if (currentClose === item.entryPrice) {
+                if (item.highestPrice !== item.entryPrice || item.lowestPrice !== item.entryPrice) {
+                    item.highestPrice = item.entryPrice;
+                    item.lowestPrice = item.entryPrice;
+                    updated = true;
+                }
+            } else {
+                if (currentClose > item.highestPrice) {
+                    item.highestPrice = currentClose;
+                    updated = true;
+                }
+                if (currentClose < item.lowestPrice && currentClose > 0) {
+                    item.lowestPrice = currentClose;
+                    updated = true;
+                }
+            }
+        }
+    });
+
+    if (updated) {
+        saveWatchlist();
+    }
+}
+
+function updateDrawerWatchButton(ticker) {
+    const btn = document.getElementById('detail-watch-btn');
+    if (!btn) return;
+    const watched = isWatched(ticker);
+    if (watched) {
+        btn.classList.add('watched');
+        btn.innerHTML = '★ Watched';
+    } else {
+        btn.classList.remove('watched');
+        btn.innerHTML = '☆ Watch';
+    }
+}
 
 // ApexCharts references
 let chartPriceVolume = null;
@@ -178,12 +291,12 @@ async function startSync() {
 
     // Clean and cache Shareholders
     globalShareholderData = shareholders.results.map(s => {
-        let shares = parseIndoNum(s.jumlah_saham);
-        let pct = parseIndoNum(s.persentase);
-        let change = parseIndoNum(s.perubahan);
+        let shares = parseIndoNum(s.jumlah_saham_current);
+        let pct = parseFloat(s.pct_current) || 0;
+        let change = parseFloat(s.perubahan) || 0;
 
         return {
-            tanggal_laporan: s.tanggal_laporan,
+            tanggal_laporan: s.report_date || '--',
             kode_emiten: s.kode_emiten,
             nama_pemegang_saham: s.nama_pemegang_saham,
             jenis: inferInvestorType(s.nama_pemegang_saham, s.status),
@@ -196,7 +309,11 @@ async function startSync() {
     // Cache Leaderboard listings
     globalLeaderboardData = leaderboard.results || [];
 
+    // Update tracking for watchlist items
+    updateWatchlistTracking();
+
     // Render components
+    renderIHSGProxy();
     renderLeaderboard();
     renderMovers();
     applyGlobalFilters();
@@ -215,6 +332,32 @@ async function startSync() {
 // --------------------------------------------------------------------------
 // Sidebar Component Renderers
 // --------------------------------------------------------------------------
+function renderIHSGProxy() {
+    if (!globalMarketData || !globalScreenerData) return;
+    
+    let totalMCap = 0;
+    let weightedPctSum = 0;
+    
+    globalMarketData.forEach(m => {
+        const sc = globalScreenerData.find(s => s.kode_saham === m.kode_saham);
+        if (sc && sc.mCap > 0 && m.prev > 0) {
+            totalMCap += sc.mCap;
+            weightedPctSum += (sc.mCap * m.pct);
+        }
+    });
+    
+    if (totalMCap > 0) {
+        const ihsgPct = weightedPctSum / totalMCap;
+        const ihsgElem = document.getElementById('ihsg-val');
+        const ihsgPctElem = document.getElementById('ihsg-pct');
+        if (ihsgElem && ihsgPctElem) {
+            ihsgElem.textContent = 'IHSG';
+            ihsgPctElem.textContent = formatPct(ihsgPct);
+            ihsgPctElem.className = ihsgPct > 0 ? 'txt-green' : (ihsgPct < 0 ? 'txt-red' : '');
+        }
+    }
+}
+
 function renderLeaderboard() {
     const list = document.getElementById('leaderboard-list');
     if (!list) return;
@@ -254,23 +397,29 @@ function renderMovers() {
 
     // Gainers
     document.getElementById('gainers-list').innerHTML = gainers.map(s => `
-        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer;" title="Click to inspect Details">
-            <div>
-                <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price">${formatNum(s.close)}</div>
+        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer; display:flex; flex-direction:column; padding: 12px;" title="Click to inspect Details">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div class="m-code" style="font-weight: 700; font-size: 0.95rem;">${s.kode_saham}</div>
+                <div class="m-change positive" style="font-weight: 700;">${formatPct(s.pct)}</div>
             </div>
-            <div class="m-change positive">${formatPct(s.pct)}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 6px; font-size: 0.8rem; color: var(--text-muted);">
+                <div>Rp ${formatNum(s.close)} <span style="margin-left:4px; font-size:0.75rem; color:var(--green);">+${s.diff}</span></div>
+                <div>Vol: ${formatMoney(s.vol)}</div>
+            </div>
         </div>
     `).join('');
 
     // Losers
     document.getElementById('losers-list').innerHTML = losers.map(s => `
-        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer;" title="Click to inspect Details">
-            <div>
-                <div class="m-code">${s.kode_saham}</div>
-                <div class="m-price">${formatNum(s.close)}</div>
+        <div class="mover-item clickable-row" data-ticker="${s.kode_saham}" style="cursor:pointer; display:flex; flex-direction:column; padding: 12px;" title="Click to inspect Details">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div class="m-code" style="font-weight: 700; font-size: 0.95rem;">${s.kode_saham}</div>
+                <div class="m-change negative" style="font-weight: 700;">${formatPct(s.pct)}</div>
             </div>
-            <div class="m-change negative">${formatPct(s.pct)}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 6px; font-size: 0.8rem; color: var(--text-muted);">
+                <div>Rp ${formatNum(s.close)} <span style="margin-left:4px; font-size:0.75rem; color:var(--red);">${s.diff}</span></div>
+                <div>Vol: ${formatMoney(s.vol)}</div>
+            </div>
         </div>
     `).join('');
 }
@@ -314,13 +463,44 @@ function applyGlobalFilters() {
 
     const addSortScores = arr => arr.map(item => ({
         ...item,
-        _score: scoreMap[item.kode_saham || item.kode_emiten] || 0,
-        _grade: gradeMap[item.kode_saham || item.kode_emiten] || 'F'
+        _score: scoreMap[item.kode_saham || item.kode_emiten || item.ticker] || 0,
+        _grade: gradeMap[item.kode_saham || item.kode_emiten || item.ticker] || 'F'
     })).sort((a, b) => b._score - a._score);
+
+    // Filter Watchlist Data
+    let filteredWatchlist = globalWatchlistData.map(w => {
+        const stock = globalMarketData ? globalMarketData.find(s => s.kode_saham === w.ticker) : null;
+        const currentClose = stock ? stock.close : w.entryPrice;
+        const changeVsEntry = w.entryPrice > 0 ? ((currentClose - w.entryPrice) / w.entryPrice) * 100 : 0;
+        const maxHighPct = w.entryPrice > 0 ? ((w.highestPrice - w.entryPrice) / w.entryPrice) * 100 : 0;
+        const maxLowPct = w.entryPrice > 0 ? ((w.lowestPrice - w.entryPrice) / w.entryPrice) * 100 : 0;
+
+        return {
+            ...w,
+            kode_saham: w.ticker,
+            nama_perusahaan: w.name,
+            close: currentClose,
+            _changeVsEntry: changeVsEntry,
+            _maxHighPct: maxHighPct,
+            _maxLowPct: maxLowPct,
+            pct: stock ? stock.pct : 0
+        };
+    });
+
+    if (query !== '') {
+        filteredWatchlist = filteredWatchlist.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
+    }
+    if (selectedSector !== '') {
+        const matchingScreenerTickers = globalScreenerData
+            .filter(s => s.sektor === selectedSector)
+            .map(s => s.kode_saham);
+        filteredWatchlist = filteredWatchlist.filter(s => matchingScreenerTickers.includes(s.kode_saham));
+    }
 
     renderSummaryTable(addSortScores(filteredSummary));
     renderScreenerTable(addSortScores(filteredScreener));
     renderShareholdersTable(filteredShareholders);
+    renderWatchlistTable(addSortScores(filteredWatchlist));
 }
 
 // --------------------------------------------------------------------------
@@ -329,14 +509,14 @@ function applyGlobalFilters() {
 function renderSummaryTable(data) {
     const tbody = document.querySelector('#table-summary tbody');
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" class="center">No Summary Data Available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="center">No Summary Data Available</td></tr>';
         return;
     }
 
     tbody.innerHTML = data.map(s => {
         let fNetColor = s.fNet > 0 ? 'txt-green' : (s.fNet < 0 ? 'txt-red' : '');
         let pctColor = s.pct > 0 ? 'txt-green' : (s.pct < 0 ? 'txt-red' : '');
-        
+
         let c10 = s.vol_10d_pct > 0 ? 'txt-green' : (s.vol_10d_pct < 0 ? 'txt-red' : '');
         let c20 = s.vol_20d_pct > 0 ? 'txt-green' : (s.vol_20d_pct < 0 ? 'txt-red' : '');
         let c3m = s.vol_3m_pct > 0 ? 'txt-green' : (s.vol_3m_pct < 0 ? 'txt-red' : '');
@@ -347,10 +527,15 @@ function renderSummaryTable(data) {
         else if (s._score >= 40) gradeClass = 'grade-c';
         else if (s._score >= 20) gradeClass = 'grade-d';
 
+        const watched = isWatched(s.kode_saham);
+
         return `
         <tr class="clickable-row" data-ticker="${s.kode_saham}">
+            <td class="center">
+                <button class="star-btn ${watched ? 'active' : ''} btn-star-toggle" data-ticker="${s.kode_saham}" title="${watched ? 'Remove from Watchlist' : 'Add to Watchlist'}">${watched ? '★' : '☆'}</button>
+            </td>
             <td class="t-code">${s.kode_saham}</td>
-            <td style="max-width:200px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_perusahaan}">${s.nama_perusahaan}</td>
+            <td style="max-width:140px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_perusahaan}">${s.nama_perusahaan}</td>
             <td class="right t-num">${formatNum(s.close)}</td>
             <td class="right t-num ${pctColor}">${formatPct(s.pct)}</td>
             <td class="right t-num">${formatMoney(s.vol)}</td>
@@ -359,7 +544,7 @@ function renderSummaryTable(data) {
             <td class="right t-num ${c3m}">${formatPct(s.vol_3m_pct)}</td>
             <td class="right t-num">${formatMoney(s.val)}</td>
             <td class="right t-num">${formatNum(s.freq)}</td>
-            <td class="right t-num ${fNetColor}">${formatNum(s.fNet)}</td>
+            <td class="right t-num ${fNetColor}">${formatMoney(s.fNet)}</td>
             <td class="center"><span class="badge-grade ${gradeClass}">${s._grade}</span></td>
         </tr>
         `;
@@ -369,7 +554,7 @@ function renderSummaryTable(data) {
 function renderScreenerTable(data) {
     const tbody = document.querySelector('#table-screener tbody');
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="center">No Screener Data Available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="center">No Screener Data Available</td></tr>';
         return;
     }
 
@@ -379,12 +564,17 @@ function renderScreenerTable(data) {
         let roeColor = s.roe > 15 ? 'txt-green' : (s.roe < 5 ? 'txt-red' : '');
         let npmColor = s.npm > 15 ? 'txt-green' : (s.npm < 5 ? 'txt-red' : '');
 
+        const watched = isWatched(s.kode_saham);
+
         return `
         <tr class="clickable-row" data-ticker="${s.kode_saham}">
+            <td class="center">
+                <button class="star-btn ${watched ? 'active' : ''} btn-star-toggle" data-ticker="${s.kode_saham}" title="${watched ? 'Remove from Watchlist' : 'Add to Watchlist'}">${watched ? '★' : '☆'}</button>
+            </td>
             <td class="t-code">${s.kode_saham}</td>
-            <td style="max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_perusahaan}">${s.nama_perusahaan}</td>
-            <td>${s.sektor}</td>
-            <td style="max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.industri}">${s.industri}</td>
+            <td style="max-width:130px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_perusahaan}">${s.nama_perusahaan}</td>
+            <td style="max-width:110px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.sektor}">${s.sektor}</td>
+            <td style="max-width:110px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.industri}">${s.industri}</td>
             <td class="right t-num ${peColor}">${s.per.toFixed(2)}</td>
             <td class="right t-num ${pbvColor}">${s.pbv.toFixed(2)}</td>
             <td class="right t-num ${roeColor}">${formatPct(s.roe)}</td>
@@ -421,6 +611,58 @@ function renderShareholdersTable(data) {
             <td class="right t-num">${formatNum(s.jumlah_saham)}</td>
             <td class="right t-num">${s.persentase.toFixed(2)}%</td>
             <td class="right t-num ${changeColor}">${formatNum(s.perubahan)}${ppText}</td>
+        </tr>
+        `;
+    }).join('');
+}
+
+function renderWatchlistTable(data) {
+    const tbody = document.querySelector('#table-watchlist tbody');
+    if (!tbody) return;
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" class="center" style="padding: 30px; color: var(--text-muted);">No stocks in Watchlist Zone yet. Click ★ on any stock row or detail drawer to start tracking.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(w => {
+        const stock = globalMarketData ? globalMarketData.find(s => s.kode_saham === w.ticker) : null;
+        const currentClose = stock ? stock.close : w.entryPrice;
+        const todayPct = stock ? stock.pct : 0;
+
+        const changeVsEntry = w.entryPrice > 0 ? ((currentClose - w.entryPrice) / w.entryPrice) * 100 : 0;
+        const maxHighPct = w._maxHighPct !== undefined ? w._maxHighPct : (w.entryPrice > 0 ? ((w.highestPrice - w.entryPrice) / w.entryPrice) * 100 : 0);
+        const maxLowPct = w._maxLowPct !== undefined ? w._maxLowPct : (w.entryPrice > 0 ? ((w.lowestPrice - w.entryPrice) / w.entryPrice) * 100 : 0);
+
+        const changeVsEntryColor = changeVsEntry > 0 ? 'txt-green' : (changeVsEntry < 0 ? 'txt-red' : '');
+        const maxHighColor = maxHighPct > 0 ? 'txt-green' : '';
+        const maxLowColor = maxLowPct < 0 ? 'txt-red' : '';
+        const todayPctColor = todayPct > 0 ? 'txt-green' : (todayPct < 0 ? 'txt-red' : '');
+
+        let gradeClass = 'grade-f';
+        if (w._score >= 80) gradeClass = 'grade-a';
+        else if (w._score >= 60) gradeClass = 'grade-b';
+        else if (w._score >= 40) gradeClass = 'grade-c';
+        else if (w._score >= 20) gradeClass = 'grade-d';
+
+        return `
+        <tr class="clickable-row" data-ticker="${w.ticker}">
+            <td class="center">
+                <button class="star-btn active btn-star-toggle" data-ticker="${w.ticker}" title="Remove from Watchlist">★</button>
+            </td>
+            <td class="t-code">${w.ticker}</td>
+            <td style="max-width:130px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${w.name}">${w.name}</td>
+            <td style="font-size:0.75rem; color:var(--text-muted);">${w.entryDate}</td>
+            <td class="right t-num">Rp ${formatNum(w.entryPrice)}</td>
+            <td class="right t-num" style="font-weight:700;">Rp ${formatNum(currentClose)}</td>
+            <td class="right t-num ${changeVsEntryColor}" style="font-weight:700;">${formatPct(changeVsEntry)}</td>
+            <td class="right t-num ${maxHighColor}">${formatPct(maxHighPct)}</td>
+            <td class="right t-num ${maxLowColor}">${formatPct(maxLowPct)}</td>
+            <td class="right t-num ${todayPctColor}">${formatPct(todayPct)}</td>
+            <td class="center"><span class="badge-grade ${gradeClass}">${w._grade}</span></td>
+            <td class="center">
+                <button class="btn-remove-watchlist btn-remove-item" data-ticker="${w.ticker}" title="Remove Ticker">Remove</button>
+            </td>
         </tr>
         `;
     }).join('');
@@ -475,6 +717,17 @@ async function showStockDetailPanel(ticker) {
     // Open Drawer panel
     const panel = document.getElementById('stock-detail-panel');
     panel.classList.add('open');
+
+    // Update watch button state in drawer
+    updateDrawerWatchButton(ticker);
+    
+    // Reset tabs to Checklist
+    document.querySelectorAll('.detail-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.detail-tab-pane').forEach(p => p.classList.remove('active'));
+    const defaultTabBtn = document.querySelector('.detail-tab-btn[data-target="detail-confirmation"]');
+    if (defaultTabBtn) defaultTabBtn.classList.add('active');
+    const defaultPane = document.getElementById('detail-confirmation');
+    if (defaultPane) defaultPane.classList.add('active');
 
     // Fetch deep-dive statistics concurrently
     const [historyData, confirmData, valuationData, ownershipData] = await Promise.all([
@@ -927,6 +1180,117 @@ function destroyCharts() {
 }
 
 // --------------------------------------------------------------------------
+// Column Sort Engine
+// --------------------------------------------------------------------------
+const sortState = {}; // { tableId: { colIdx, direction } }
+
+function setupTableSort(tableId, columnKeys) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const headers = table.querySelectorAll('thead th');
+
+    headers.forEach((th, idx) => {
+        if (idx >= columnKeys.length) return;
+        th.style.cursor = 'pointer';
+        th.setAttribute('data-sort-key', columnKeys[idx]);
+        th.addEventListener('click', () => {
+            const key = columnKeys[idx];
+            const state = sortState[tableId] || {};
+            let direction = 'asc';
+            if (state.colIdx === idx) {
+                direction = state.direction === 'asc' ? 'desc' : 'asc';
+            }
+            sortState[tableId] = { colIdx: idx, direction };
+
+            // Update sort indicator arrows on headers
+            headers.forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+            });
+            th.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            // Get the appropriate dataset
+            let dataSource;
+            if (tableId === 'table-summary') dataSource = globalMarketData;
+            else if (tableId === 'table-screener') dataSource = globalScreenerData;
+            else if (tableId === 'table-shareholders') dataSource = globalShareholderData;
+            else if (tableId === 'table-watchlist') {
+                dataSource = globalWatchlistData.map(w => {
+                    const stock = globalMarketData ? globalMarketData.find(s => s.kode_saham === w.ticker) : null;
+                    const currentClose = stock ? stock.close : w.entryPrice;
+                    const changeVsEntry = w.entryPrice > 0 ? ((currentClose - w.entryPrice) / w.entryPrice) * 100 : 0;
+                    return {
+                        ...w,
+                        kode_saham: w.ticker,
+                        nama_perusahaan: w.name,
+                        close: currentClose,
+                        _changeVsEntry: changeVsEntry,
+                        pct: stock ? stock.pct : 0
+                    };
+                });
+            }
+            if (!dataSource) return;
+
+            // Apply current search/sector filters
+            const query = document.getElementById('search-main').value.trim().toUpperCase();
+            const selectedSector = document.getElementById('sector-filter').value;
+            let filtered = [...dataSource];
+
+            if (query !== '') {
+                if (tableId === 'table-shareholders') {
+                    filtered = filtered.filter(s => s.kode_emiten.includes(query) || s.nama_pemegang_saham.toUpperCase().includes(query));
+                } else {
+                    filtered = filtered.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
+                }
+            }
+            if (selectedSector !== '' && tableId !== 'table-shareholders') {
+                const matchingTickers = globalScreenerData.filter(s => s.sektor === selectedSector).map(s => s.kode_saham);
+                if (tableId === 'table-summary') {
+                    filtered = filtered.filter(s => matchingTickers.includes(s.kode_saham));
+                } else {
+                    filtered = filtered.filter(s => s.sektor === selectedSector);
+                }
+            }
+
+            // Add grade scores for summary/screener/watchlist
+            if (tableId !== 'table-shareholders') {
+                const scoreMap = {};
+                const gradeMap = {};
+                globalLeaderboardData.forEach(item => {
+                    scoreMap[item.kode_saham] = item.score;
+                    gradeMap[item.kode_saham] = item.grade;
+                });
+                filtered = filtered.map(item => ({
+                    ...item,
+                    _score: scoreMap[item.kode_saham || item.kode_emiten || item.ticker] || 0,
+                    _grade: gradeMap[item.kode_saham || item.kode_emiten || item.ticker] || 'F'
+                }));
+            }
+
+            // Sort
+            filtered.sort((a, b) => {
+                let valA = a[key];
+                let valB = b[key];
+                // Handle string vs number
+                if (typeof valA === 'string' && typeof valB === 'string') {
+                    return direction === 'asc'
+                        ? valA.localeCompare(valB)
+                        : valB.localeCompare(valA);
+                }
+                valA = valA || 0;
+                valB = valB || 0;
+                return direction === 'asc' ? valA - valB : valB - valA;
+            });
+
+            // Re-render the specific table
+            if (tableId === 'table-summary') renderSummaryTable(filtered);
+            else if (tableId === 'table-screener') renderScreenerTable(filtered);
+            else if (tableId === 'table-shareholders') renderShareholdersTable(filtered);
+            else if (tableId === 'table-watchlist') renderWatchlistTable(filtered);
+        });
+    });
+}
+
+// --------------------------------------------------------------------------
 // UI Listeners & Orchestration Event Handlers
 // --------------------------------------------------------------------------
 function setupListeners() {
@@ -986,10 +1350,50 @@ function setupListeners() {
         });
     });
 
-
+    // Column sort handlers for all tables
+    setupTableSort('table-summary', [
+        'kode_saham', 'kode_saham', 'nama_perusahaan', 'close', 'pct', 'vol',
+        'vol_10d_pct', 'vol_20d_pct', 'vol_3m_pct', 'val', 'freq', 'fNet', '_score'
+    ]);
+    setupTableSort('table-screener', [
+        'kode_saham', 'kode_saham', 'nama_perusahaan', 'sektor', 'industri',
+        'per', 'pbv', 'roe', 'roa', 'npm', 'der', 'mCap'
+    ]);
+    setupTableSort('table-shareholders', [
+        'tanggal_laporan', 'kode_emiten', 'nama_pemegang_saham',
+        'jenis', 'jumlah_saham', 'persentase', 'perubahan'
+    ]);
+    setupTableSort('table-watchlist', [
+        'kode_saham', 'kode_saham', 'nama_perusahaan', 'entryDate', 'entryPrice',
+        'close', '_changeVsEntry', '_maxHighPct', '_maxLowPct', 'pct', '_score'
+    ]);
 
     // Click triggers for selecting and deep diving details of stocks
     document.addEventListener('click', (e) => {
+        const starBtn = e.target.closest('.btn-star-toggle');
+        if (starBtn) {
+            e.stopPropagation();
+            const ticker = starBtn.getAttribute('data-ticker');
+            toggleWatchlist(ticker);
+            return;
+        }
+
+        const removeBtn = e.target.closest('.btn-remove-item');
+        if (removeBtn) {
+            e.stopPropagation();
+            const ticker = removeBtn.getAttribute('data-ticker');
+            toggleWatchlist(ticker);
+            return;
+        }
+
+        const detailWatchBtn = e.target.closest('#detail-watch-btn');
+        if (detailWatchBtn) {
+            if (activeTicker) {
+                toggleWatchlist(activeTicker);
+            }
+            return;
+        }
+
         const row = e.target.closest('tr[data-ticker]') || e.target.closest('.mover-item[data-ticker]');
         if (row) {
             const ticker = row.getAttribute('data-ticker');
@@ -1002,6 +1406,7 @@ function setupListeners() {
 // Initialization Entry point
 // --------------------------------------------------------------------------
 function init() {
+    loadWatchlist();
     setupListeners();
     startSync();
 }
