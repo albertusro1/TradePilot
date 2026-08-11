@@ -18,7 +18,7 @@ let scraperPollInterval = null;
 
 // Bind Button
 triggerScrapeBtn.addEventListener('click', async () => {
-    if (!confirm('WARNING: Force-triggering the Scraper bypasses cron schedules and consumes massive server memory to run Puppeteer in Docker.\n\nAre you sure you want to proceed?')) return;
+    if (!confirm('WARNING: Force-triggering the Scraper bypasses cron schedules and executes the Node.js scraper pipeline immediately.\n\nAre you sure you want to proceed?')) return;
     
     triggerScrapeBtn.textContent = '▶ TRIGGERING...'; 
     triggerScrapeBtn.style.opacity = '0.5';
