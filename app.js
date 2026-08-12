@@ -385,7 +385,7 @@ function renderLeaderboard() {
         return;
     }
 
-    list.innerHTML = globalLeaderboardData.map(s => {
+    list.innerHTML = globalLeaderboardData.slice(0, 30).map(s => {
         const score = s.score || 0;
         const grade = s.grade || 'F';
         let gradeClass = 'grade-f';
