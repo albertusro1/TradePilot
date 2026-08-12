@@ -184,6 +184,24 @@ function inferInvestorType(name, status) {
     return `${type} (${nat})`;
 }
 
+// Helper: Unified Grade & Badge CSS Class calculation
+function getGradeFromScore(score) {
+    if (score >= 90) return 'A+';
+    if (score >= 80) return 'A';
+    if (score >= 70) return 'B';
+    if (score >= 55) return 'C';
+    if (score >= 40) return 'D';
+    return 'F';
+}
+
+function getGradeClassFromScore(score) {
+    if (score >= 80) return 'grade-a';
+    if (score >= 70) return 'grade-b';
+    if (score >= 55) return 'grade-c';
+    if (score >= 40) return 'grade-d';
+    return 'grade-f';
+}
+
 // Fetch API Helper
 async function fetchAPI(endpoint) {
     try {
@@ -461,11 +479,16 @@ function applyGlobalFilters() {
         gradeMap[item.kode_saham] = item.grade;
     });
 
-    const addSortScores = arr => arr.map(item => ({
-        ...item,
-        _score: scoreMap[item.kode_saham || item.kode_emiten || item.ticker] || 0,
-        _grade: gradeMap[item.kode_saham || item.kode_emiten || item.ticker] || 'F'
-    })).sort((a, b) => b._score - a._score);
+    const addSortScores = arr => arr.map(item => {
+        const ticker = item.kode_saham || item.kode_emiten || item.ticker;
+        const score = scoreMap[ticker] !== undefined ? scoreMap[ticker] : 0;
+        const grade = (gradeMap[ticker] && gradeMap[ticker] !== 'F') ? gradeMap[ticker] : getGradeFromScore(score);
+        return {
+            ...item,
+            _score: score,
+            _grade: grade
+        };
+    }).sort((a, b) => b._score - a._score);
 
     // Filter Watchlist Data
     let filteredWatchlist = globalWatchlistData.map(w => {
@@ -521,11 +544,7 @@ function renderSummaryTable(data) {
         let c20 = s.vol_20d_pct > 0 ? 'txt-green' : (s.vol_20d_pct < 0 ? 'txt-red' : '');
         let c3m = s.vol_3m_pct > 0 ? 'txt-green' : (s.vol_3m_pct < 0 ? 'txt-red' : '');
 
-        let gradeClass = 'grade-f';
-        if (s._score >= 80) gradeClass = 'grade-a';
-        else if (s._score >= 60) gradeClass = 'grade-b';
-        else if (s._score >= 40) gradeClass = 'grade-c';
-        else if (s._score >= 20) gradeClass = 'grade-d';
+        let gradeClass = getGradeClassFromScore(s._score);
 
         const watched = isWatched(s.kode_saham);
 
@@ -639,11 +658,7 @@ function renderWatchlistTable(data) {
         const maxLowColor = maxLowPct < 0 ? 'txt-red' : '';
         const todayPctColor = todayPct > 0 ? 'txt-green' : (todayPct < 0 ? 'txt-red' : '');
 
-        let gradeClass = 'grade-f';
-        if (w._score >= 80) gradeClass = 'grade-a';
-        else if (w._score >= 60) gradeClass = 'grade-b';
-        else if (w._score >= 40) gradeClass = 'grade-c';
-        else if (w._score >= 20) gradeClass = 'grade-d';
+        let gradeClass = getGradeClassFromScore(w._score);
 
         return `
         <tr class="clickable-row" data-ticker="${w.ticker}">
@@ -872,11 +887,11 @@ function renderConfirmationDetails(data) {
 
     // Composite grade badge
     const score = data.total_score || 0;
-    const grade = data.grade || '--';
+    const grade = data.grade || getGradeFromScore(score);
     const gradeEl = document.getElementById('detail-grade');
     
     gradeEl.textContent = `Grade: ${grade}`;
-    gradeEl.className = 'badge-grade ' + (score >= 80 ? 'grade-a' : (score >= 60 ? 'grade-b' : (score >= 40 ? 'grade-c' : (score >= 20 ? 'grade-d' : 'grade-f'))));
+    gradeEl.className = 'badge-grade ' + getGradeClassFromScore(score);
 
     // Dynamic radial subscore gauges
     createCircularGauge('gauge-technical-container', data.technical?.score || 0, 35, '#00f2fe');
