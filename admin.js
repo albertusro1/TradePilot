@@ -56,7 +56,15 @@ async function pollScraperStatus() {
         adminHealth.className = 'value txt-green';
         
         if (data.logs && data.logs.length > 0) {
-            terminalLogs.innerHTML = data.logs.join('<br>');
+            const escaped = data.logs.map(l => 
+                String(l)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;")
+            );
+            terminalLogs.innerHTML = escaped.join('<br>');
             const terminalWindow = terminalLogs.parentElement;
             // Native auto-scroll to bottom of log output
             terminalWindow.scrollTop = terminalWindow.scrollHeight;

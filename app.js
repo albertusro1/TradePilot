@@ -91,21 +91,13 @@ function updateWatchlistTracking() {
         if (stock) {
             const currentClose = stock.close;
 
-            if (currentClose === item.entryPrice) {
-                if (item.highestPrice !== item.entryPrice || item.lowestPrice !== item.entryPrice) {
-                    item.highestPrice = item.entryPrice;
-                    item.lowestPrice = item.entryPrice;
-                    updated = true;
-                }
-            } else {
-                if (currentClose > item.highestPrice) {
-                    item.highestPrice = currentClose;
-                    updated = true;
-                }
-                if (currentClose < item.lowestPrice && currentClose > 0) {
-                    item.lowestPrice = currentClose;
-                    updated = true;
-                }
+            if (currentClose > item.highestPrice) {
+                item.highestPrice = currentClose;
+                updated = true;
+            }
+            if ((currentClose < item.lowestPrice || item.lowestPrice === 0) && currentClose > 0) {
+                item.lowestPrice = currentClose;
+                updated = true;
             }
         }
     });
@@ -281,7 +273,7 @@ async function startSync() {
 
     // Clean and cache Fundamental Screener
     globalScreenerData = screener.results.map(s => {
-        let per = parseIndoNum(s.per_);
+        let per = parseIndoNum(s.per || s.per_);
         let pbv = parseIndoNum(s.pbv);
         let roe = parseIndoNum(s.roe_pct);
         let roa = parseIndoNum(s.roa_pct);
