@@ -9,6 +9,7 @@ const API_KEY = 'dev_secret_key';
 let globalMarketData = null;
 let globalScreenerData = null;
 let globalShareholderData = null;
+let globalShareholders1PctData = null;
 let globalLeaderboardData = null;
 let globalWatchlistData = [];
 
@@ -219,10 +220,11 @@ async function startSync() {
     syncText.textContent = 'Synchronizing...';
     
     // Concurrently fetch summary data matrices
-    const [summary, screener, shareholders, leaderboard] = await Promise.all([
+    const [summary, screener, shareholders, shareholders1Pct, leaderboard] = await Promise.all([
         fetchAPI('/market/summary'),
         fetchAPI('/market/screener'),
         fetchAPI('/market/shareholders?page=1&per_page=2000'),
+        fetchAPI('/market/shareholders-1pct?page=1&per_page=2000'),
         fetchAPI('/market/leaderboard')
     ]);
     
@@ -302,8 +304,9 @@ async function startSync() {
     // Clean and cache Shareholders
     globalShareholderData = shareholders.results.map(s => {
         let shares = parseIndoNum(s.jumlah_saham_current);
-        let pct = parseFloat(s.pct_current) || 0;
-        let change = parseFloat(s.perubahan) || 0;
+        let pctCurr = parseFloat((s.pct_current || '0').replace(',', '.')) || 0;
+        let pctPrev = parseFloat((s.pct_previous || '0').replace(',', '.')) || 0;
+        let change = parseFloat((s.perubahan || '0').replace(/,/g, '')) || 0;
 
         return {
             tanggal_laporan: s.report_date || '--',
@@ -311,7 +314,27 @@ async function startSync() {
             nama_pemegang_saham: s.nama_pemegang_saham,
             jenis: inferInvestorType(s.nama_pemegang_saham, s.status),
             jumlah_saham: shares,
-            persentase: pct,
+            persentase: pctCurr,
+            pct_previous: pctPrev,
+            perubahan: change
+        };
+    });
+
+    // Clean and cache 1% Shareholders
+    globalShareholders1PctData = (shareholders1Pct && shareholders1Pct.results ? shareholders1Pct.results : []).map(s => {
+        let shares = parseIndoNum(s.jumlah_saham_current);
+        let pctCurr = parseFloat((s.pct_current || '0').replace(',', '.')) || 0;
+        let pctPrev = parseFloat((s.pct_previous || '0').replace(',', '.')) || 0;
+        let change = parseFloat((s.perubahan || '0').replace(/,/g, '')) || 0;
+
+        return {
+            tanggal_laporan: s.report_date || '--',
+            kode_emiten: s.kode_emiten,
+            nama_pemegang_saham: s.nama_pemegang_saham,
+            jenis: s.jenis || inferInvestorType(s.nama_pemegang_saham, s.status),
+            jumlah_saham: shares,
+            persentase: pctCurr,
+            pct_previous: pctPrev,
             perubahan: change
         };
     });
@@ -444,12 +467,16 @@ function applyGlobalFilters() {
     let filteredSummary = globalMarketData;
     let filteredScreener = globalScreenerData;
     let filteredShareholders = globalShareholderData;
+    let filteredShareholders1Pct = globalShareholders1PctData;
 
     // Apply Search
     if (query !== '') {
         filteredSummary = filteredSummary.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
         filteredScreener = filteredScreener.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
         filteredShareholders = filteredShareholders.filter(s => s.kode_emiten.includes(query) || s.nama_pemegang_saham.toUpperCase().includes(query));
+        if (filteredShareholders1Pct) {
+            filteredShareholders1Pct = filteredShareholders1Pct.filter(s => s.kode_emiten.includes(query) || s.nama_pemegang_saham.toUpperCase().includes(query));
+        }
     }
 
     // Apply Sector
@@ -461,6 +488,9 @@ function applyGlobalFilters() {
         filteredSummary = filteredSummary.filter(s => matchingScreenerTickers.includes(s.kode_saham));
         filteredScreener = filteredScreener.filter(s => s.sektor === selectedSector);
         filteredShareholders = filteredShareholders.filter(s => matchingScreenerTickers.includes(s.kode_emiten));
+        if (filteredShareholders1Pct) {
+            filteredShareholders1Pct = filteredShareholders1Pct.filter(s => matchingScreenerTickers.includes(s.kode_emiten));
+        }
     }
 
     // Default Sorting: Map confirmation grades from Leaderboard to tables, sort descending by score
@@ -515,6 +545,7 @@ function applyGlobalFilters() {
     renderSummaryTable(addSortScores(filteredSummary));
     renderScreenerTable(addSortScores(filteredScreener));
     renderShareholdersTable(filteredShareholders);
+    renderShareholders1PctTable(filteredShareholders1Pct);
     renderWatchlistTable(addSortScores(filteredWatchlist));
 }
 
@@ -609,9 +640,14 @@ function renderShareholdersTable(data) {
         let changeColor = s.perubahan > 0 ? 'txt-green' : (s.perubahan < 0 ? 'txt-red' : '');
         let ppText = '';
         
-        if (Math.abs(s.perubahan) > 0.0001) {
-            ppText = ` (${s.perubahan > 0 ? '+' : ''}${s.perubahan.toFixed(2)} pp)`;
+        let ppShift = (s.persentase || 0) - (s.pct_previous || 0);
+        if (Math.abs(ppShift) >= 0.005) {
+            ppText = ` (${ppShift > 0 ? '+' : ''}${ppShift.toFixed(2)} pp)`;
         }
+
+        let changeDisplay = s.perubahan !== 0
+            ? `${s.perubahan > 0 ? '+' : ''}${formatNum(s.perubahan)}${ppText}`
+            : '0';
 
         return `
         <tr class="clickable-row" data-ticker="${s.kode_emiten}">
@@ -621,7 +657,42 @@ function renderShareholdersTable(data) {
             <td>${s.jenis}</td>
             <td class="right t-num">${formatNum(s.jumlah_saham)}</td>
             <td class="right t-num">${s.persentase.toFixed(2)}%</td>
-            <td class="right t-num ${changeColor}">${formatNum(s.perubahan)}${ppText}</td>
+            <td class="right t-num ${changeColor}">${changeDisplay}</td>
+        </tr>
+        `;
+    }).join('');
+}
+
+function renderShareholders1PctTable(data) {
+    const tbody = document.querySelector('#table-shareholders-1pct tbody');
+    if (!tbody) return;
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="center">No 1% Shareholders Data Available</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(s => {
+        let changeColor = s.perubahan > 0 ? 'txt-green' : (s.perubahan < 0 ? 'txt-red' : '');
+        let ppText = '';
+        
+        let ppShift = (s.persentase || 0) - (s.pct_previous || 0);
+        if (Math.abs(ppShift) >= 0.005) {
+            ppText = ` (${ppShift > 0 ? '+' : ''}${ppShift.toFixed(2)} pp)`;
+        }
+
+        let changeDisplay = s.perubahan !== 0
+            ? `${s.perubahan > 0 ? '+' : ''}${formatNum(s.perubahan)}${ppText}`
+            : '0';
+
+        return `
+        <tr class="clickable-row" data-ticker="${s.kode_emiten}">
+            <td>${s.tanggal_laporan}</td>
+            <td class="t-code">${s.kode_emiten}</td>
+            <td style="max-width:240px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${s.nama_pemegang_saham}">${s.nama_pemegang_saham}</td>
+            <td>${s.jenis}</td>
+            <td class="right t-num">${formatNum(s.jumlah_saham)}</td>
+            <td class="right t-num">${s.persentase.toFixed(2)}%</td>
+            <td class="right t-num ${changeColor}">${changeDisplay}</td>
         </tr>
         `;
     }).join('');
@@ -1220,6 +1291,7 @@ function setupTableSort(tableId, columnKeys) {
             if (tableId === 'table-summary') dataSource = globalMarketData;
             else if (tableId === 'table-screener') dataSource = globalScreenerData;
             else if (tableId === 'table-shareholders') dataSource = globalShareholderData;
+            else if (tableId === 'table-shareholders-1pct') dataSource = globalShareholders1PctData;
             else if (tableId === 'table-watchlist') {
                 dataSource = globalWatchlistData.map(w => {
                     const stock = globalMarketData ? globalMarketData.find(s => s.kode_saham === w.ticker) : null;
@@ -1243,13 +1315,13 @@ function setupTableSort(tableId, columnKeys) {
             let filtered = [...dataSource];
 
             if (query !== '') {
-                if (tableId === 'table-shareholders') {
+                if (tableId === 'table-shareholders' || tableId === 'table-shareholders-1pct') {
                     filtered = filtered.filter(s => s.kode_emiten.includes(query) || s.nama_pemegang_saham.toUpperCase().includes(query));
                 } else {
                     filtered = filtered.filter(s => s.kode_saham.includes(query) || s.nama_perusahaan.toUpperCase().includes(query));
                 }
             }
-            if (selectedSector !== '' && tableId !== 'table-shareholders') {
+            if (selectedSector !== '' && tableId !== 'table-shareholders' && tableId !== 'table-shareholders-1pct') {
                 const matchingTickers = globalScreenerData.filter(s => s.sektor === selectedSector).map(s => s.kode_saham);
                 if (tableId === 'table-summary') {
                     filtered = filtered.filter(s => matchingTickers.includes(s.kode_saham));
@@ -1259,7 +1331,7 @@ function setupTableSort(tableId, columnKeys) {
             }
 
             // Add grade scores for summary/screener/watchlist
-            if (tableId !== 'table-shareholders') {
+            if (tableId !== 'table-shareholders' && tableId !== 'table-shareholders-1pct') {
                 const scoreMap = {};
                 const gradeMap = {};
                 globalLeaderboardData.forEach(item => {
@@ -1292,6 +1364,7 @@ function setupTableSort(tableId, columnKeys) {
             if (tableId === 'table-summary') renderSummaryTable(filtered);
             else if (tableId === 'table-screener') renderScreenerTable(filtered);
             else if (tableId === 'table-shareholders') renderShareholdersTable(filtered);
+            else if (tableId === 'table-shareholders-1pct') renderShareholders1PctTable(filtered);
             else if (tableId === 'table-watchlist') renderWatchlistTable(filtered);
         });
     });
@@ -1367,6 +1440,10 @@ function setupListeners() {
         'per', 'pbv', 'roe', 'roa', 'npm', 'der', 'mCap'
     ]);
     setupTableSort('table-shareholders', [
+        'tanggal_laporan', 'kode_emiten', 'nama_pemegang_saham',
+        'jenis', 'jumlah_saham', 'persentase', 'perubahan'
+    ]);
+    setupTableSort('table-shareholders-1pct', [
         'tanggal_laporan', 'kode_emiten', 'nama_pemegang_saham',
         'jenis', 'jumlah_saham', 'persentase', 'perubahan'
     ]);
